@@ -1,0 +1,7 @@
+[package]
+name = "the_observer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tinkerforge = "2.0"
