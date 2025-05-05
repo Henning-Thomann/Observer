@@ -88,13 +88,18 @@ if __name__ == "__main__":
     finally:
         # gracefully close the connection
         conn.disconnect()
+        Discord.send("\tData before DC:")
+        Discord.send("\t=========")
+        Discord.send(SENSOR_DATA.temperature)
+        Discord.send(SENSOR_DATA.illuminance)
+        Discord.send("\t=========")
         print("\rconnection closed")
 
 class Discord:
     def send( message ):
  
         # your webhook URL
-        path = "https://discord.com/api/webhooks/1368859906295336970/hsWqqe-BRz4spgGuEXUo7IGd8lEPHY_MIYs0Ix_WJaLgsTRVeJHXqbf3ZYvfhb2NgGfz"
+        path = "https://discord.com/api/webhooks/WEBHOOK"
         host = "discord.com"
          
         payload = json.dumps({"content": message})
@@ -114,5 +119,5 @@ class Discord:
         # return back to the calling function with the result
         return f"{response.status} {response.reason}\n{result.decode()}"
      
-    # send the messsage and print the response
-    print( send( sys.argv[1] ) )
+        # send the messsage and print the response
+        print( send( sys.argv[1] ) )
