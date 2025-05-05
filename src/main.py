@@ -1,5 +1,10 @@
 import os
 
+# discord-notification imports
+import sys
+import http.client
+import json
+
 from tinkerforge.ip_connection import IPConnection
 
 from tinkerforge.bricklet_ptc_v2 import BrickletPTCV2
@@ -85,3 +90,29 @@ if __name__ == "__main__":
         conn.disconnect()
         print("\rconnection closed")
 
+class Discord:
+    def send( message ):
+ 
+        # your webhook URL
+        path = "https://discord.com/api/webhooks/1368859906295336970/hsWqqe-BRz4spgGuEXUo7IGd8lEPHY_MIYs0Ix_WJaLgsTRVeJHXqbf3ZYvfhb2NgGfz"
+        host = "discord.com"
+         
+        payload = json.dumps({"content": message})
+
+        headers = {
+            "Content-Type": "application/json"
+        }
+        
+        # get the connection and make the request
+        connection = http.client.HTTPSConnection(host)
+        connection.request("POST", path, body=payload, headers=headers)
+        
+        # get the response
+        response = connection.getresponse()
+        result = response.read()
+     
+        # return back to the calling function with the result
+        return f"{response.status} {response.reason}\n{result.decode()}"
+     
+    # send the messsage and print the response
+    print( send( sys.argv[1] ) )
