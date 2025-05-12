@@ -50,7 +50,7 @@ class Discord:
     def send(message):
  
         # your webhook URL
-        path = "https://discord.com/api/webhooks/WEBHOOK"
+        path = "https://discord.com/api/webhooks/1368888888386650153/8aSeZEhLJP5SKvdbGZrPmupJo93QnIr1tOMBc92QCG2b8xjaPZcv2HLY5DHVdmgngCtC"
         host = "discord.com"
 
         payload = json.dumps({"content": message})
@@ -123,8 +123,8 @@ if __name__ == "__main__":
         conn.disconnect()
         Discord.send("\tData before DC:")
         Discord.send("\t=========")
-        Discord.send(SENSOR_DATA.temperature)
-        Discord.send(SENSOR_DATA.illuminance)
+        Discord.send(str(SENSOR_DATA.temperature))
+        Discord.send(str(SENSOR_DATA.illuminance))
         Discord.send("\t=========")
         print("\rconnection closed")
 
