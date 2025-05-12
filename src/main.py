@@ -6,6 +6,8 @@ from tinkerforge.bricklet_ptc_v2 import BrickletPTCV2
 from tinkerforge.bricklet_piezo_speaker_v2 import BrickletPiezoSpeakerV2
 from tinkerforge.bricklet_ambient_light_v3 import BrickletAmbientLightV3
 
+from MoistureSensore import MoistureSensor
+
 import time
 
 class Statistics:
@@ -66,6 +68,8 @@ if __name__ == "__main__":
 
     ambient_light.register_callback(ambient_light.CALLBACK_ILLUMINANCE, ambient_light_callback)
     ambient_light.set_illuminance_callback_configuration(1000, False, "x", 0, 0)
+
+    moisture_sensor = MoistureSensor(conn, "ViW", 1000)
 
     try:
         while True:
