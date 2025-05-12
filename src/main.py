@@ -69,7 +69,12 @@ if __name__ == "__main__":
 
     try:
         while True:
-            os.system("clear") # clear screen
+            # clear screen
+            if os.name == "Windows":
+                os.system("cls")
+            else:
+                os.system("clear")
+
             print("\tLIVE DATA")
             print("\t=========")
             print(SENSOR_DATA.temperature)
