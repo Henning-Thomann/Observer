@@ -67,6 +67,8 @@ if __name__ == "__main__":
     ambient_light.register_callback(ambient_light.CALLBACK_ILLUMINANCE, ambient_light_callback)
     ambient_light.set_illuminance_callback_configuration(1000, False, "x", 0, 0)
 
+    speaker.set_alarm(250, 750, 1, 5, 0, 3000)
+
     try:
         while True:
             # clear screen
@@ -79,7 +81,6 @@ if __name__ == "__main__":
             print("\t=========")
             print(SENSOR_DATA.temperature)
             print(SENSOR_DATA.illuminance)
-
             time.sleep(1) # sleep for 1 second
 
     except KeyboardInterrupt:
