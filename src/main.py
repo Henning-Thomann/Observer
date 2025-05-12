@@ -14,18 +14,28 @@ from tinkerforge.bricklet_ambient_light_v3 import BrickletAmbientLightV3
 import time
 
 class Statistics:
-    def __init__(self, title, unit, min, max):
+    def __init__(self, title, unit, min, max, critical_min=None, critical_max=None):
         self._current = None
+        self.is_critical = False
 
         self.title = title
         self.unit = unit
         self.minimum = max
         self.maximum = min
 
+        self.critical_min = critical_min
+        self.critical_max = critical_max
+
     def set_current(self, value):
         self._current = value
         self.minimum = min(self.minimum, value)
         self.maximum = max(self.maximum, value)
+
+        self.is_critical = (
+                self.critical_min is not None and self.critical_min > self._current
+        ) or (
+                self.critical_max is not None and self.critical_max < self._current
+        )
 
     def get_current(self):
         return self._current
