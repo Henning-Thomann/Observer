@@ -54,6 +54,12 @@ class SensorData:
         self.temperature = Statistics("TEMPERATURE", "°C", 0, 80)
         self.illuminance = Statistics("ILLUMINANCE", "lx", 0, 1600, critical_min=50)
 
+    def __iter__(self):
+        yield self.temperature
+        yield self.illuminance
+
+        return StopIteration
+
 with open("wh.dat") as f:
     WEBHOOK = f.readline()
 
@@ -120,11 +126,11 @@ if __name__ == "__main__":
 
             print("\tLIVE DATA")
             print("\t=========")
-            print(SENSOR_DATA.temperature)
-            print(SENSOR_DATA.illuminance)
+            for data in SENSOR_DATA:
+                print(data)
 
-            if(SENSOR_DATA.illuminance.is_critical):
-                Discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
+                if(data.is_critical):
+                    Discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
 
             time.sleep(1) # sleep for 1 second
 
