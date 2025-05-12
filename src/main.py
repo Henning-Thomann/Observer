@@ -52,17 +52,20 @@ class Statistics:
 class SensorData:
     def __init__(self):
         self.temperature = Statistics("TEMPERATURE", "°C", 0, 80)
-        self.illuminance = Statistics("ILLUMINANCE", "lx", 0, 1600)
+        self.illuminance = Statistics("ILLUMINANCE", "lx", 0, 1600, critical_min=50)
 
 with open("wh.dat") as f:
     WEBHOOK = f.readline()
 
 class Discord:
+    # get the connection and make the request
+    host = "discord.com"
+    connection = http.client.HTTPSConnection(host)
+
     @staticmethod
     def send(message):
         global WEBHOOK
         # your webhook URL
-        host = "discord.com"
 
         payload = json.dumps({"content": message})
 
@@ -70,19 +73,14 @@ class Discord:
             "Content-Type": "application/json"
         }
 
-        # get the connection and make the request
-        connection = http.client.HTTPSConnection(host)
-        connection.request("POST", WEBHOOK, body=payload, headers=headers)
+        Discord.connection.request("POST", WEBHOOK, body=payload, headers=headers)
 
         # get the response
-        response = connection.getresponse()
+        response = Discord.connection.getresponse()
         result = response.read()
 
         # return back to the calling function with the result
         return f"{response.status} {response.reason}\n{result.decode()}"
-
-        # send the messsage and print the response
-        print( send( sys.argv[1] ) )
 
 IP = "172.20.10.242"
 PORT = 4223
@@ -124,6 +122,9 @@ if __name__ == "__main__":
             print("\t=========")
             print(SENSOR_DATA.temperature)
             print(SENSOR_DATA.illuminance)
+
+            if(SENSOR_DATA.illuminance.is_critical):
+                Discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
 
             time.sleep(1) # sleep for 1 second
 
