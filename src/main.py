@@ -54,13 +54,14 @@ class SensorData:
         self.temperature = Statistics("TEMPERATURE", "°C", 0, 80)
         self.illuminance = Statistics("ILLUMINANCE", "lx", 0, 1600)
 
+with open("wh.dat") as f:
+    WEBHOOK = f.readline()
 
 class Discord:
     @staticmethod
     def send(message):
- 
+        global WEBHOOK
         # your webhook URL
-        path = "https://discord.com/api/webhooks/WEBHOOK"
         host = "discord.com"
 
         payload = json.dumps({"content": message})
@@ -71,7 +72,7 @@ class Discord:
 
         # get the connection and make the request
         connection = http.client.HTTPSConnection(host)
-        connection.request("POST", path, body=payload, headers=headers)
+        connection.request("POST", WEBHOOK, body=payload, headers=headers)
 
         # get the response
         response = connection.getresponse()
