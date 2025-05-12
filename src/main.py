@@ -70,7 +70,7 @@ if __name__ == "__main__":
     try:
         while True:
             # clear screen
-            if os.name == "Windows":
+            if os.name == "nt":
                 os.system("cls")
             else:
                 os.system("clear")
