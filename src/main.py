@@ -11,6 +11,8 @@ from tinkerforge.bricklet_ptc_v2 import BrickletPTCV2
 from tinkerforge.bricklet_piezo_speaker_v2 import BrickletPiezoSpeakerV2
 from tinkerforge.bricklet_ambient_light_v3 import BrickletAmbientLightV3
 from tinkerforge.bricklet_humidity_v2 import BrickletHumidityV2
+from tinkerforge.bricklet_motion_detector_v2 import BrickletMotionDetectorV2
+from tinkerforge.bricklet_rgb_led_button import BrickletRGBLEDButton
 
 import time
 
@@ -91,6 +93,25 @@ class Discord:
         # return back to the calling function with the result
         return f"{response.status} {response.reason}\n{result.decode()}"
 
+class Alarm:
+    def __init__(self, conn, duration):
+        self.speaker = BrickletPiezoSpeakerV2("R7M", conn)
+        self.led_button = BrickletRGBLEDButton("23Qx", conn)
+        self.duration = duration
+
+    def setup(self):
+        self.led_button.set_color(0, 0, 0)
+        self.led_button.register_callback(self.led_button.CALLBACK_BUTTON_STATE_CHANGED, self.button_callback)
+
+    def trigger_alarm(self):
+        self.speaker.set_alarm(800, 2000, 10, 1, 1, self.duration)
+        self.led_button.set_color(200, 30, 30)
+
+    def button_callback(self, state):
+        if (state == self.led_button.BUTTON_STATE_PRESSED):
+            self.led_button.set_color(0, 0, 0)
+
+
 IP = "172.20.10.242"
 PORT = 4223
 
@@ -105,14 +126,20 @@ def ambient_light_callback(illuminance):
 def moisture_callback(moisture):
     SENSOR_DATA.moisture_sensore.set_current(moisture / 100)
 
+def start_motion_detection():
+    print("start motion detected")
+
+def end_motion_detection():
+    print("stop motion detected")
+
 if __name__ == "__main__":
     conn = IPConnection()
-
-    speaker = BrickletPiezoSpeakerV2("R7M", conn)
 
     ambient_light = BrickletAmbientLightV3("Pdw", conn)
     temp = BrickletPTCV2("Wcg", conn)
     moisture_sensore = BrickletHumidityV2("ViW", conn)
+    motion_detection = BrickletMotionDetectorV2("ML4", conn)
+    alarm = Alarm(conn, 5000);
 
     conn.connect(IP, PORT)
 
@@ -126,23 +153,30 @@ if __name__ == "__main__":
     moisture_sensore.register_callback(moisture_sensore.CALLBACK_HUMIDITY, moisture_callback)
     moisture_sensore.set_humidity_callback_configuration(1000, False, "x", 0, 0)
 
+    motion_detection.register_callback(motion_detection.CALLBACK_MOTION_DETECTED, start_motion_detection)
+    motion_detection.register_callback(motion_detection.CALLBACK_DETECTION_CYCLE_ENDED, end_motion_detection)
+
+    alarm.setup()
+    alarm.trigger_alarm()
+
     try:
         while True:
+            pass
             # clear screen
-            if os.name == "nt":
-                os.system("cls")
-            else:
-                os.system("clear")
-
-            print("\tLIVE DATA")
-            print("\t=========")
-            for data in SENSOR_DATA:
-                print(data)
-
-                if(data.is_critical):
-                    Discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
-
-            time.sleep(1) # sleep for 1 second
+            #if os.name == "nt":
+            #    os.system("cls")
+            #else:
+            #    os.system("clear")
+#
+            #print("\tLIVE DATA")
+            #print("\t=========")
+            #for data in SENSOR_DATA:
+            #    print(data)
+#
+            #    if(data.is_critical):
+            #        Discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
+#
+            #time.sleep(1) # sleep for 1 second
 
     except KeyboardInterrupt:
         # the user ended the program so we absorb the exception
@@ -150,9 +184,9 @@ if __name__ == "__main__":
     finally:
         # gracefully close the connection
         conn.disconnect()
-        Discord.send("\tData before DC:")
-        Discord.send("\t=========")
-        Discord.send(str(SENSOR_DATA.temperature))
-        Discord.send(str(SENSOR_DATA.illuminance))
-        Discord.send("\t=========")
+        #Discord.send("\tData before DC:")
+        #Discord.send("\t=========")
+        #Discord.send(str(SENSOR_DATA.temperature))
+        #Discord.send(str(SENSOR_DATA.illuminance))
+        #Discord.send("\t=========")
         print("\rconnection closed")
