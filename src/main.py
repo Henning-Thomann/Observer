@@ -163,9 +163,9 @@ if __name__ == "__main__":
     finally:
         # gracefully close the connection
         conn.disconnect()
-        Discord.send("\tData before DC:")
-        Discord.send("\t=========")
-        Discord.send(str(SENSOR_DATA.temperature))
-        Discord.send(str(SENSOR_DATA.illuminance))
-        Discord.send("\t=========")
         print("\rconnection closed")
+
+        Discord.send(f"""
+            Data before disconnect:
+                {str(SENSOR_DATA)}
+            """)
