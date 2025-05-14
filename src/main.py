@@ -12,6 +12,7 @@ from tinkerforge.bricklet_ptc_v2 import BrickletPTCV2
 from tinkerforge.bricklet_piezo_speaker_v2 import BrickletPiezoSpeakerV2
 from tinkerforge.bricklet_ambient_light_v3 import BrickletAmbientLightV3
 from tinkerforge.bricklet_humidity_v2 import BrickletHumidityV2
+from tinkerforge.bricklet_e_paper_296x128 import BrickletEPaper296x128
 
 import time
 
@@ -57,15 +58,18 @@ class Statistics:
 class SensorData:
     def __init__(self):
         self.temperature = Statistics("TEMPERATURE", "°C", 0, 80)
-        self.illuminance = Statistics("ILLUMINANCE", "lx", 0, 1600)
-        self.moisture_sensore = Statistics("MOISTURE", "%RH", 0, 100)
         self.illuminance = Statistics("ILLUMINANCE", "lx", 0, 1600, critical_min=50)
+        self.moisture = Statistics("MOISTURE", "%RH", 0, 100)
 
     def __iter__(self):
         yield self.temperature
         yield self.illuminance
+        yield self.moisture
 
         return StopIteration
+
+    def __str__(self):
+        return "\n".join([str(data) for data in self])
 
 with open("wh.dat") as f:
     WEBHOOK = f.readline()
@@ -110,7 +114,7 @@ def ambient_light_callback(illuminance):
     SENSOR_DATA.illuminance.set_current(illuminance / 100)
 
 def moisture_callback(moisture):
-    SENSOR_DATA.moisture_sensore.set_current(moisture / 100)
+    SENSOR_DATA.moisture.set_current(moisture / 100)
 
 if __name__ == "__main__":
     conn = IPConnection()
@@ -143,10 +147,8 @@ if __name__ == "__main__":
 
             now = datetime.now()
 
-            print("\tLIVE DATA")
-            print("\t=========")
+            print(SENSOR_DATA)
             for data in SENSOR_DATA:
-                print(data)
 
                 notified_seconds_ago = (now - data.last_notified).total_seconds()
                 if(data.is_critical and notified_seconds_ago > NOTIFICATION_DELAY_SECONDS):
