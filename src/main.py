@@ -10,6 +10,7 @@ from tinkerforge.ip_connection import IPConnection
 from tinkerforge.bricklet_ptc_v2 import BrickletPTCV2
 from tinkerforge.bricklet_piezo_speaker_v2 import BrickletPiezoSpeakerV2
 from tinkerforge.bricklet_ambient_light_v3 import BrickletAmbientLightV3
+from tinkerforge.bricklet_humidity_v2 import BrickletHumidityV2
 
 import time
 
@@ -52,6 +53,8 @@ class Statistics:
 class SensorData:
     def __init__(self):
         self.temperature = Statistics("TEMPERATURE", "°C", 0, 80)
+        self.illuminance = Statistics("ILLUMINANCE", "lx", 0, 1600)
+        self.moisture_sensore = Statistics("MOISTURE", "%RH", 0, 100)
         self.illuminance = Statistics("ILLUMINANCE", "lx", 0, 1600, critical_min=50)
 
     def __iter__(self):
@@ -99,6 +102,9 @@ def temperature_callback(temperature):
 def ambient_light_callback(illuminance):
     SENSOR_DATA.illuminance.set_current(illuminance / 100)
 
+def moisture_callback(moisture):
+    SENSOR_DATA.moisture_sensore.set_current(moisture / 100)
+
 if __name__ == "__main__":
     conn = IPConnection()
 
@@ -106,6 +112,7 @@ if __name__ == "__main__":
 
     ambient_light = BrickletAmbientLightV3("Pdw", conn)
     temp = BrickletPTCV2("Wcg", conn)
+    moisture_sensore = BrickletHumidityV2("ViW", conn)
 
     conn.connect(IP, PORT)
 
@@ -115,6 +122,9 @@ if __name__ == "__main__":
 
     ambient_light.register_callback(ambient_light.CALLBACK_ILLUMINANCE, ambient_light_callback)
     ambient_light.set_illuminance_callback_configuration(1000, False, "x", 0, 0)
+
+    moisture_sensore.register_callback(moisture_sensore.CALLBACK_HUMIDITY, moisture_callback)
+    moisture_sensore.set_humidity_callback_configuration(1000, False, "x", 0, 0)
 
     try:
         while True:
@@ -146,4 +156,3 @@ if __name__ == "__main__":
         Discord.send(str(SENSOR_DATA.illuminance))
         Discord.send("\t=========")
         print("\rconnection closed")
-
