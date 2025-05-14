@@ -17,3 +17,4 @@ Finally we can install the dependencies and run the project.
 pip install -r requirements.txt
 python3 src/main.py
 ```
+An additional ``wh.dat`` file which contains the discord webhook (as fully qualified link) is required.
