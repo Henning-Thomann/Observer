@@ -52,12 +52,12 @@ class Statistics:
         current: {self._current}{self.unit}
         minimum: {self.minimum}{self.unit}
         maximum: {self.maximum}{self.unit}
-        """
+        """.strip()
 
 # used as global state
 class SensorData:
     def __init__(self):
-        self.temperature = Statistics("TEMPERATURE", "°C", 0, 80)
+        self.temperature = Statistics("TEMPERATURE", "C", 0, 80)
         self.illuminance = Statistics("ILLUMINANCE", "lx", 0, 1600, critical_min=50)
         self.moisture = Statistics("MOISTURE", "%RH", 0, 100)
 
@@ -119,8 +119,11 @@ def moisture_callback(moisture):
 if __name__ == "__main__":
     conn = IPConnection()
 
+    # actors
     speaker = BrickletPiezoSpeakerV2("R7M", conn)
+    paper_display = BrickletEPaper296x128("XGL", conn)
 
+    # sensors
     ambient_light = BrickletAmbientLightV3("Pdw", conn)
     temp = BrickletPTCV2("Wcg", conn)
     moisture_sensore = BrickletHumidityV2("ViW", conn)
@@ -148,6 +151,17 @@ if __name__ == "__main__":
             now = datetime.now()
 
             print(SENSOR_DATA)
+
+            paper_display.fill_display(paper_display.COLOR_BLACK)
+            for (i, data) in enumerate(SENSOR_DATA):
+                paper_display.draw_text(
+                    8, 16 * (i + 1),
+                    paper_display.FONT_12X16,
+                    paper_display.COLOR_RED if data.is_critical else paper_display.COLOR_WHITE,
+                    paper_display.ORIENTATION_HORIZONTAL,
+                    f"{data.title}:{data.get_current()} {data.unit}")
+            paper_display.draw()
+
             for data in SENSOR_DATA:
 
                 notified_seconds_ago = (now - data.last_notified).total_seconds()
@@ -155,7 +169,7 @@ if __name__ == "__main__":
                     Discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
                     data.last_notified = now
 
-            time.sleep(1) # sleep for 1 second
+            time.sleep(10)
 
     except KeyboardInterrupt:
         # the user ended the program so we absorb the exception
