@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 # discord-notification imports
 import sys
@@ -25,6 +26,9 @@ class Statistics:
 
         self.critical_min = critical_min
         self.critical_max = critical_max
+
+        # time stamp when the last notification was send
+        self.last_notified = datetime(2000, 1, 1)
 
     def set_current(self, value):
         self._current = value
@@ -91,6 +95,9 @@ class Discord:
 IP = "172.20.10.242"
 PORT = 4223
 
+# delay between notification when a critical measurement is taken
+NOTIFICATION_DELAY_SECONDS = 60 * 5
+
 SENSOR_DATA = SensorData()
 
 def temperature_callback(temperature):
@@ -124,13 +131,17 @@ if __name__ == "__main__":
             else:
                 os.system("clear")
 
+            now = datetime.now()
+
             print("\tLIVE DATA")
             print("\t=========")
             for data in SENSOR_DATA:
                 print(data)
 
-                if(data.is_critical):
+                notified_seconds_ago = (now - data.last_notified).total_seconds()
+                if(data.is_critical and notified_seconds_ago > NOTIFICATION_DELAY_SECONDS):
                     Discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
+                    data.last_notified = now
 
             time.sleep(1) # sleep for 1 second
 
