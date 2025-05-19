@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 # discord-notification imports
 import sys
@@ -14,6 +15,7 @@ from tinkerforge.bricklet_ambient_light_v3 import BrickletAmbientLightV3
 from tinkerforge.bricklet_humidity_v2 import BrickletHumidityV2
 from tinkerforge.bricklet_motion_detector_v2 import BrickletMotionDetectorV2
 from tinkerforge.bricklet_rgb_led_button import BrickletRGBLEDButton
+from tinkerforge.bricklet_e_paper_296x128 import BrickletEPaper296x128
 
 import time
 
@@ -24,16 +26,19 @@ class Statistics:
 
         self.title = title
         self.unit = unit
-        self.minimum = max
-        self.maximum = min
+        self.measured_minimum = max
+        self.measured_maximum = min
 
         self.critical_min = critical_min
         self.critical_max = critical_max
 
+        # time stamp when the last notification was send
+        self.last_notified = datetime(2000, 1, 1)
+
     def set_current(self, value):
         self._current = value
-        self.minimum = min(self.minimum, value)
-        self.maximum = max(self.maximum, value)
+        self.measured_minimum = min(self.measured_minimum, value)
+        self.measured_maximum = max(self.measured_maximum, value)
 
         self.is_critical = (
                 self.critical_min is not None and self.critical_min > self._current
@@ -48,23 +53,26 @@ class Statistics:
         return f"""
         {self.title}
         current: {self._current}{self.unit}
-        minimum: {self.minimum}{self.unit}
-        maximum: {self.maximum}{self.unit}
-        """
+        minimum: {self.measured_minimum}{self.unit}
+        maximum: {self.measured_maximum}{self.unit}
+        """.strip()
 
 # used as global state
 class SensorData:
     def __init__(self):
-        self.temperature = Statistics("TEMPERATURE", "°C", 0, 80)
-        self.illuminance = Statistics("ILLUMINANCE", "lx", 0, 1600)
-        self.moisture_sensore = Statistics("MOISTURE", "%RH", 0, 100)
+        self.temperature = Statistics("TEMPERATURE", "C", 0, 80)
         self.illuminance = Statistics("ILLUMINANCE", "lx", 0, 1600, critical_min=50)
+        self.moisture = Statistics("MOISTURE", "%RH", 0, 100)
 
     def __iter__(self):
         yield self.temperature
         yield self.illuminance
+        yield self.moisture
 
         return StopIteration
+
+    def __str__(self):
+        return "\n".join([str(data) for data in self])
 
 with open("wh.dat") as f:
     WEBHOOK = f.readline()
@@ -120,6 +128,9 @@ class Alarm:
 IP = "172.20.10.242"
 PORT = 4223
 
+# delay between notification when a critical measurement is taken
+NOTIFICATION_DELAY_SECONDS = 60 * 5
+
 SENSOR_DATA = SensorData()
 
 def temperature_callback(temperature):
@@ -129,7 +140,7 @@ def ambient_light_callback(illuminance):
     SENSOR_DATA.illuminance.set_current(illuminance / 100)
 
 def moisture_callback(moisture):
-    SENSOR_DATA.moisture_sensore.set_current(moisture / 100)
+    SENSOR_DATA.moisture.set_current(moisture / 100)
 
 def start_motion_detection():
     print("start motion detected")
@@ -140,6 +151,11 @@ def end_motion_detection():
 if __name__ == "__main__":
     conn = IPConnection()
 
+    # actors
+    speaker = BrickletPiezoSpeakerV2("R7M", conn)
+    paper_display = BrickletEPaper296x128("XGL", conn)
+
+    # sensors
     ambient_light = BrickletAmbientLightV3("Pdw", conn)
     temp = BrickletPTCV2("Wcg", conn)
     moisture_sensore = BrickletHumidityV2("ViW", conn)
@@ -164,6 +180,8 @@ if __name__ == "__main__":
     alarm.setup()
     alarm.trigger_alarm()
 
+    count = 0
+
     try:
         while True:
             pass
@@ -173,15 +191,29 @@ if __name__ == "__main__":
             else:
                 os.system("clear")
 
-            print("\tLIVE DATA")
-            print("\t=========")
+            now = datetime.now()
+
+            print(SENSOR_DATA)
+
+            paper_display.fill_display(paper_display.COLOR_BLACK)
+            if count % 20 == 0:
+                for (i, data) in enumerate(SENSOR_DATA):
+                    paper_display.draw_text(
+                        8, 16 * (i + 1),
+                        paper_display.FONT_12X16,
+                        paper_display.COLOR_RED if data.is_critical else paper_display.COLOR_WHITE,
+                        paper_display.ORIENTATION_HORIZONTAL,
+                        f"{data.title}:{data.get_current()} {data.unit}")
+                paper_display.draw()
+
             for data in SENSOR_DATA:
-                print(data)
 
-                if(data.is_critical):
+                notified_seconds_ago = (now - data.last_notified).total_seconds()
+                if(data.is_critical and notified_seconds_ago > NOTIFICATION_DELAY_SECONDS):
                     Discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
+                    data.last_notified = now
 
-            time.sleep(1) # sleep for 1 second
+            time.sleep(1)
 
     except KeyboardInterrupt:
         # the user ended the program so we absorb the exception
@@ -189,9 +221,9 @@ if __name__ == "__main__":
     finally:
         # gracefully close the connection
         conn.disconnect()
-        Discord.send("\tData before DC:")
-        Discord.send("\t=========")
-        Discord.send(str(SENSOR_DATA.temperature))
-        Discord.send(str(SENSOR_DATA.illuminance))
-        Discord.send("\t=========")
         print("\rconnection closed")
+
+        Discord.send(f"""
+            Data before disconnect:
+                {str(SENSOR_DATA)}
+            """)
