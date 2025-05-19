@@ -4,6 +4,7 @@ import os
 import sys
 import http.client
 import json
+import time
 
 from tinkerforge.ip_connection import IPConnection
 
@@ -94,23 +95,27 @@ class Discord:
         return f"{response.status} {response.reason}\n{result.decode()}"
 
 class Alarm:
-    def __init__(self, conn, duration):
+    def __init__(self, conn):
         self.speaker = BrickletPiezoSpeakerV2("R7M", conn)
         self.led_button = BrickletRGBLEDButton("23Qx", conn)
-        self.duration = duration
+        self._is_triggered = False
 
     def setup(self):
         self.led_button.set_color(0, 0, 0)
         self.led_button.register_callback(self.led_button.CALLBACK_BUTTON_STATE_CHANGED, self.button_callback)
 
     def trigger_alarm(self):
-        self.speaker.set_alarm(800, 2000, 10, 1, 1, self.duration)
+        self._is_triggered = True
         self.led_button.set_color(200, 30, 30)
+
+        while self._is_triggered:
+            self.speaker.set_alarm(800, 2000, 10, 1, 1, 1000)
+            time.sleep(1)
 
     def button_callback(self, state):
         if (state == self.led_button.BUTTON_STATE_PRESSED):
             self.led_button.set_color(0, 0, 0)
-
+            self._is_triggered = False
 
 IP = "172.20.10.242"
 PORT = 4223
@@ -139,7 +144,7 @@ if __name__ == "__main__":
     temp = BrickletPTCV2("Wcg", conn)
     moisture_sensore = BrickletHumidityV2("ViW", conn)
     motion_detection = BrickletMotionDetectorV2("ML4", conn)
-    alarm = Alarm(conn, 5000);
+    alarm = Alarm(conn);
 
     conn.connect(IP, PORT)
 
@@ -163,20 +168,20 @@ if __name__ == "__main__":
         while True:
             pass
             # clear screen
-            #if os.name == "nt":
-            #    os.system("cls")
-            #else:
-            #    os.system("clear")
-#
-            #print("\tLIVE DATA")
-            #print("\t=========")
-            #for data in SENSOR_DATA:
-            #    print(data)
-#
-            #    if(data.is_critical):
-            #        Discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
-#
-            #time.sleep(1) # sleep for 1 second
+            if os.name == "nt":
+                os.system("cls")
+            else:
+                os.system("clear")
+
+            print("\tLIVE DATA")
+            print("\t=========")
+            for data in SENSOR_DATA:
+                print(data)
+
+                if(data.is_critical):
+                    Discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
+
+            time.sleep(1) # sleep for 1 second
 
     except KeyboardInterrupt:
         # the user ended the program so we absorb the exception
@@ -184,9 +189,9 @@ if __name__ == "__main__":
     finally:
         # gracefully close the connection
         conn.disconnect()
-        #Discord.send("\tData before DC:")
-        #Discord.send("\t=========")
-        #Discord.send(str(SENSOR_DATA.temperature))
-        #Discord.send(str(SENSOR_DATA.illuminance))
-        #Discord.send("\t=========")
+        Discord.send("\tData before DC:")
+        Discord.send("\t=========")
+        Discord.send(str(SENSOR_DATA.temperature))
+        Discord.send(str(SENSOR_DATA.illuminance))
+        Discord.send("\t=========")
         print("\rconnection closed")
