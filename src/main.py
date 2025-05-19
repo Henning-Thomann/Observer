@@ -6,6 +6,8 @@ import sys
 import http.client
 import json
 import Discord
+import time
+
 
 from tinkerforge.ip_connection import IPConnection
 
@@ -13,6 +15,8 @@ from tinkerforge.bricklet_ptc_v2 import BrickletPTCV2
 from tinkerforge.bricklet_piezo_speaker_v2 import BrickletPiezoSpeakerV2
 from tinkerforge.bricklet_ambient_light_v3 import BrickletAmbientLightV3
 from tinkerforge.bricklet_humidity_v2 import BrickletHumidityV2
+from tinkerforge.bricklet_motion_detector_v2 import BrickletMotionDetectorV2
+from tinkerforge.bricklet_rgb_led_button import BrickletRGBLEDButton
 from tinkerforge.bricklet_e_paper_296x128 import BrickletEPaper296x128
 from tinkerforge.bricklet_nfc import BrickletNFC
 
@@ -77,6 +81,29 @@ class SensorData:
 
 
 
+class Alarm:
+    def __init__(self, conn):
+        self.speaker = BrickletPiezoSpeakerV2("R7M", conn)
+        self.led_button = BrickletRGBLEDButton("23Qx", conn)
+        self._is_triggered = False
+
+    def setup(self):
+        self.led_button.set_color(0, 0, 0)
+        self.led_button.register_callback(self.led_button.CALLBACK_BUTTON_STATE_CHANGED, self.button_callback)
+
+    def trigger_alarm(self):
+        self._is_triggered = True
+        self.led_button.set_color(200, 30, 30)
+
+        while self._is_triggered:
+            self.speaker.set_alarm(800, 2000, 10, 1, 1, 1000)
+            time.sleep(1)
+
+    def button_callback(self, state):
+        if (state == self.led_button.BUTTON_STATE_PRESSED):
+            self.led_button.set_color(0, 0, 0)
+            self._is_triggered = False
+
 IP = "172.20.10.242"
 PORT = 4223
 
@@ -106,6 +133,12 @@ def cb_reader_state_changed(state, idle, nfc):
 
     if idle:
         nfc.reader_request_tag_id()
+        
+    def start_motion_detection():
+    print("start motion detected")
+
+def end_motion_detection():
+    print("stop motion detected")
 
 if __name__ == "__main__":
     conn = IPConnection()
@@ -119,6 +152,10 @@ if __name__ == "__main__":
     temp = BrickletPTCV2("Wcg", conn)
     moisture_sensore = BrickletHumidityV2("ViW", conn)
     nfc = BrickletNFC("22ND", conn)
+  
+    motion_detection = BrickletMotionDetectorV2("ML4", conn)
+    alarm = Alarm(conn);
+
 
     conn.connect(IP, PORT)
 
@@ -137,8 +174,18 @@ if __name__ == "__main__":
                           lambda x, y: cb_reader_state_changed(x, y, nfc))
     nfc.set_mode(nfc.MODE_READER)
     
+    
+    motion_detection.register_callback(motion_detection.CALLBACK_MOTION_DETECTED, start_motion_detection)
+    motion_detection.register_callback(motion_detection.CALLBACK_DETECTION_CYCLE_ENDED, end_motion_detection)
+
+    alarm.setup()
+    alarm.trigger_alarm()
+
+    count = 0
+
     try:
         while True:
+            pass
             # clear screen
             if os.name == "nt":
                 os.system("cls")
@@ -150,14 +197,15 @@ if __name__ == "__main__":
             print(SENSOR_DATA)
 
             paper_display.fill_display(paper_display.COLOR_BLACK)
-            for (i, data) in enumerate(SENSOR_DATA):
-                paper_display.draw_text(
-                    8, 16 * (i + 1),
-                    paper_display.FONT_12X16,
-                    paper_display.COLOR_RED if data.is_critical else paper_display.COLOR_WHITE,
-                    paper_display.ORIENTATION_HORIZONTAL,
-                    f"{data.title}:{data.get_current()} {data.unit}")
-            paper_display.draw()
+            if count % 20 == 0:
+                for (i, data) in enumerate(SENSOR_DATA):
+                    paper_display.draw_text(
+                        8, 16 * (i + 1),
+                        paper_display.FONT_12X16,
+                        paper_display.COLOR_RED if data.is_critical else paper_display.COLOR_WHITE,
+                        paper_display.ORIENTATION_HORIZONTAL,
+                        f"{data.title}:{data.get_current()} {data.unit}")
+                paper_display.draw()
 
             for data in SENSOR_DATA:
 
@@ -167,6 +215,7 @@ if __name__ == "__main__":
                     data.last_notified = now
 
             time.sleep(100)
+
 
     except KeyboardInterrupt:
         # the user ended the program so we absorb the exception
