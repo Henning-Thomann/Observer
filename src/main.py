@@ -5,6 +5,7 @@ from datetime import datetime
 import sys
 import http.client
 import json
+import time
 
 from tinkerforge.ip_connection import IPConnection
 
@@ -12,6 +13,8 @@ from tinkerforge.bricklet_ptc_v2 import BrickletPTCV2
 from tinkerforge.bricklet_piezo_speaker_v2 import BrickletPiezoSpeakerV2
 from tinkerforge.bricklet_ambient_light_v3 import BrickletAmbientLightV3
 from tinkerforge.bricklet_humidity_v2 import BrickletHumidityV2
+from tinkerforge.bricklet_motion_detector_v2 import BrickletMotionDetectorV2
+from tinkerforge.bricklet_rgb_led_button import BrickletRGBLEDButton
 from tinkerforge.bricklet_e_paper_296x128 import BrickletEPaper296x128
 
 import time
@@ -99,6 +102,29 @@ class Discord:
         # return back to the calling function with the result
         return f"{response.status} {response.reason}\n{result.decode()}"
 
+class Alarm:
+    def __init__(self, conn):
+        self.speaker = BrickletPiezoSpeakerV2("R7M", conn)
+        self.led_button = BrickletRGBLEDButton("23Qx", conn)
+        self._is_triggered = False
+
+    def setup(self):
+        self.led_button.set_color(0, 0, 0)
+        self.led_button.register_callback(self.led_button.CALLBACK_BUTTON_STATE_CHANGED, self.button_callback)
+
+    def trigger_alarm(self):
+        self._is_triggered = True
+        self.led_button.set_color(200, 30, 30)
+
+        while self._is_triggered:
+            self.speaker.set_alarm(800, 2000, 10, 1, 1, 1000)
+            time.sleep(1)
+
+    def button_callback(self, state):
+        if (state == self.led_button.BUTTON_STATE_PRESSED):
+            self.led_button.set_color(0, 0, 0)
+            self._is_triggered = False
+
 IP = "172.20.10.242"
 PORT = 4223
 
@@ -116,6 +142,12 @@ def ambient_light_callback(illuminance):
 def moisture_callback(moisture):
     SENSOR_DATA.moisture.set_current(moisture / 100)
 
+def start_motion_detection():
+    print("start motion detected")
+
+def end_motion_detection():
+    print("stop motion detected")
+
 if __name__ == "__main__":
     conn = IPConnection()
 
@@ -127,6 +159,8 @@ if __name__ == "__main__":
     ambient_light = BrickletAmbientLightV3("Pdw", conn)
     temp = BrickletPTCV2("Wcg", conn)
     moisture_sensore = BrickletHumidityV2("ViW", conn)
+    motion_detection = BrickletMotionDetectorV2("ML4", conn)
+    alarm = Alarm(conn);
 
     conn.connect(IP, PORT)
 
@@ -140,9 +174,17 @@ if __name__ == "__main__":
     moisture_sensore.register_callback(moisture_sensore.CALLBACK_HUMIDITY, moisture_callback)
     moisture_sensore.set_humidity_callback_configuration(1000, False, "x", 0, 0)
 
+    motion_detection.register_callback(motion_detection.CALLBACK_MOTION_DETECTED, start_motion_detection)
+    motion_detection.register_callback(motion_detection.CALLBACK_DETECTION_CYCLE_ENDED, end_motion_detection)
+
+    alarm.setup()
+    alarm.trigger_alarm()
+
     count = 0
+
     try:
         while True:
+            pass
             # clear screen
             if os.name == "nt":
                 os.system("cls")
