@@ -157,22 +157,22 @@ if __name__ == "__main__":
 
     # sensors
     ambient_light = BrickletAmbientLightV3("Pdw", conn)
-    temp = BrickletPTCV2("Wcg", conn)
-    moisture_sensore = BrickletHumidityV2("ViW", conn)
+    temperature = BrickletPTCV2("Wcg", conn)
+    moisture_sensor = BrickletHumidityV2("ViW", conn)
     motion_detection = BrickletMotionDetectorV2("ML4", conn)
     alarm = Alarm(conn);
 
     conn.connect(IP, PORT)
 
     # register callbacks
-    temp.register_callback(temp.CALLBACK_TEMPERATURE, temperature_callback)
-    temp.set_temperature_callback_configuration(1000, False, "x", 0, 0)
+    temperature.register_callback(temperature.CALLBACK_TEMPERATURE, temperature_callback)
+    temperature.set_temperature_callback_configuration(1000, False, "x", 0, 0)
 
     ambient_light.register_callback(ambient_light.CALLBACK_ILLUMINANCE, ambient_light_callback)
     ambient_light.set_illuminance_callback_configuration(1000, False, "x", 0, 0)
 
-    moisture_sensore.register_callback(moisture_sensore.CALLBACK_HUMIDITY, moisture_callback)
-    moisture_sensore.set_humidity_callback_configuration(1000, False, "x", 0, 0)
+    moisture_sensor.register_callback(moisture_sensor.CALLBACK_HUMIDITY, moisture_callback)
+    moisture_sensor.set_humidity_callback_configuration(1000, False, "x", 0, 0)
 
     motion_detection.register_callback(motion_detection.CALLBACK_MOTION_DETECTED, start_motion_detection)
     motion_detection.register_callback(motion_detection.CALLBACK_DETECTION_CYCLE_ENDED, end_motion_detection)
