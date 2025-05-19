@@ -140,6 +140,7 @@ if __name__ == "__main__":
     moisture_sensore.register_callback(moisture_sensore.CALLBACK_HUMIDITY, moisture_callback)
     moisture_sensore.set_humidity_callback_configuration(1000, False, "x", 0, 0)
 
+    count = 0
     try:
         while True:
             # clear screen
@@ -153,14 +154,15 @@ if __name__ == "__main__":
             print(SENSOR_DATA)
 
             paper_display.fill_display(paper_display.COLOR_BLACK)
-            for (i, data) in enumerate(SENSOR_DATA):
-                paper_display.draw_text(
-                    8, 16 * (i + 1),
-                    paper_display.FONT_12X16,
-                    paper_display.COLOR_RED if data.is_critical else paper_display.COLOR_WHITE,
-                    paper_display.ORIENTATION_HORIZONTAL,
-                    f"{data.title}:{data.get_current()} {data.unit}")
-            paper_display.draw()
+            if count % 20 == 0:
+                for (i, data) in enumerate(SENSOR_DATA):
+                    paper_display.draw_text(
+                        8, 16 * (i + 1),
+                        paper_display.FONT_12X16,
+                        paper_display.COLOR_RED if data.is_critical else paper_display.COLOR_WHITE,
+                        paper_display.ORIENTATION_HORIZONTAL,
+                        f"{data.title}:{data.get_current()} {data.unit}")
+                paper_display.draw()
 
             for data in SENSOR_DATA:
 
@@ -169,7 +171,7 @@ if __name__ == "__main__":
                     Discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
                     data.last_notified = now
 
-            time.sleep(10)
+            time.sleep(1)
 
     except KeyboardInterrupt:
         # the user ended the program so we absorb the exception
