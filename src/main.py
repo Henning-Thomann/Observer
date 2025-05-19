@@ -5,6 +5,7 @@ from datetime import datetime
 import sys
 import http.client
 import json
+import Discord
 
 from tinkerforge.ip_connection import IPConnection
 
@@ -15,7 +16,7 @@ from tinkerforge.bricklet_humidity_v2 import BrickletHumidityV2
 from tinkerforge.bricklet_e_paper_296x128 import BrickletEPaper296x128
 from tinkerforge.bricklet_nfc import BrickletNFC
 
-from discord import send
+
 
 import time
 
@@ -73,9 +74,6 @@ class SensorData:
 
     def __str__(self):
         return "\n".join([str(data) for data in self])
-
-with open("wh.dat") as f:
-    WEBHOOK = f.readline()
 
 
 

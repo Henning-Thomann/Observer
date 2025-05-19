@@ -1,5 +1,13 @@
+import sys
+import http.client
+import json
+
+with open("wh.dat") as f:
+    WEBHOOK = f.readline()
+
 @staticmethod
 def send(message):
+    
     host = "discord.com"
     connection = http.client.HTTPSConnection(host)
         
@@ -12,11 +20,11 @@ def send(message):
         "Content-Type": "application/json"
     }
 
-    Discord.connection.request("POST", WEBHOOK, body=payload, headers=headers)
+    connection.request("POST", WEBHOOK, body=payload, headers=headers)
 
     # get the response
-    response = Discord.connection.getresponse()
+    response = connection.getresponse()
     result = response.read()
 
     # return back to the calling function with the result
-    eturn f"{response.status} {response.reason}\n{result.decode()}"
+    return f"{response.status} {response.reason}\n{result.decode()}"
