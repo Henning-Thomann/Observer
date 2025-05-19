@@ -23,8 +23,8 @@ class Statistics:
 
         self.title = title
         self.unit = unit
-        self.minimum = max
-        self.maximum = min
+        self.measured_minimum = max
+        self.measured_maximum = min
 
         self.critical_min = critical_min
         self.critical_max = critical_max
@@ -34,8 +34,8 @@ class Statistics:
 
     def set_current(self, value):
         self._current = value
-        self.minimum = min(self.minimum, value)
-        self.maximum = max(self.maximum, value)
+        self.measured_minimum = min(self.measured_minimum, value)
+        self.measured_maximum = max(self.measured_maximum, value)
 
         self.is_critical = (
                 self.critical_min is not None and self.critical_min > self._current
@@ -50,8 +50,8 @@ class Statistics:
         return f"""
         {self.title}
         current: {self._current}{self.unit}
-        minimum: {self.minimum}{self.unit}
-        maximum: {self.maximum}{self.unit}
+        minimum: {self.measured_minimum}{self.unit}
+        maximum: {self.measured_maximum}{self.unit}
         """.strip()
 
 # used as global state
