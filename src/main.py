@@ -5,7 +5,9 @@ from datetime import datetime
 import sys
 import http.client
 import json
+import Discord
 import time
+
 
 from tinkerforge.ip_connection import IPConnection
 
@@ -16,6 +18,9 @@ from tinkerforge.bricklet_humidity_v2 import BrickletHumidityV2
 from tinkerforge.bricklet_motion_detector_v2 import BrickletMotionDetectorV2
 from tinkerforge.bricklet_rgb_led_button import BrickletRGBLEDButton
 from tinkerforge.bricklet_e_paper_296x128 import BrickletEPaper296x128
+from tinkerforge.bricklet_nfc import BrickletNFC
+
+
 
 import time
 
@@ -74,33 +79,7 @@ class SensorData:
     def __str__(self):
         return "\n".join([str(data) for data in self])
 
-with open("wh.dat") as f:
-    WEBHOOK = f.readline()
 
-class Discord:
-    # get the connection and make the request
-    host = "discord.com"
-    connection = http.client.HTTPSConnection(host)
-
-    @staticmethod
-    def send(message):
-        global WEBHOOK
-        # your webhook URL
-
-        payload = json.dumps({"content": message})
-
-        headers = {
-            "Content-Type": "application/json"
-        }
-
-        Discord.connection.request("POST", WEBHOOK, body=payload, headers=headers)
-
-        # get the response
-        response = Discord.connection.getresponse()
-        result = response.read()
-
-        # return back to the calling function with the result
-        return f"{response.status} {response.reason}\n{result.decode()}"
 
 class Alarm:
     def __init__(self, conn):
@@ -142,7 +121,20 @@ def ambient_light_callback(illuminance):
 def moisture_callback(moisture):
     SENSOR_DATA.moisture.set_current(moisture / 100)
 
-def start_motion_detection():
+def cb_reader_state_changed(state, idle, nfc):
+    if state == nfc.READER_STATE_REQUEST_TAG_ID_READY:
+        ret = nfc.reader_get_tag_id()
+
+        print("Found tag of type " +
+              str(ret.tag_type) +
+              " with ID [" +
+              " ".join(map(str, map('0x{:02X}'.format, ret.tag_id))) +
+              "]")
+
+    if idle:
+        nfc.reader_request_tag_id()
+        
+    def start_motion_detection():
     print("start motion detected")
 
 def end_motion_detection():
@@ -159,10 +151,14 @@ if __name__ == "__main__":
     ambient_light = BrickletAmbientLightV3("Pdw", conn)
     temp = BrickletPTCV2("Wcg", conn)
     moisture_sensore = BrickletHumidityV2("ViW", conn)
+    nfc = BrickletNFC("22ND", conn)
+  
     motion_detection = BrickletMotionDetectorV2("ML4", conn)
     alarm = Alarm(conn);
 
+
     conn.connect(IP, PORT)
+
 
     # register callbacks
     temp.register_callback(temp.CALLBACK_TEMPERATURE, temperature_callback)
@@ -174,6 +170,11 @@ if __name__ == "__main__":
     moisture_sensore.register_callback(moisture_sensore.CALLBACK_HUMIDITY, moisture_callback)
     moisture_sensore.set_humidity_callback_configuration(1000, False, "x", 0, 0)
 
+    nfc.register_callback(nfc.CALLBACK_READER_STATE_CHANGED,
+                          lambda x, y: cb_reader_state_changed(x, y, nfc))
+    nfc.set_mode(nfc.MODE_READER)
+    
+    
     motion_detection.register_callback(motion_detection.CALLBACK_MOTION_DETECTED, start_motion_detection)
     motion_detection.register_callback(motion_detection.CALLBACK_DETECTION_CYCLE_ENDED, end_motion_detection)
 
@@ -213,7 +214,8 @@ if __name__ == "__main__":
                     Discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
                     data.last_notified = now
 
-            time.sleep(1)
+            time.sleep(100)
+
 
     except KeyboardInterrupt:
         # the user ended the program so we absorb the exception
