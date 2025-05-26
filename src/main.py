@@ -109,6 +109,18 @@ NOTIFICATION_DELAY_SECONDS = 60 * 5
 
 SENSOR_DATA = SensorData()
 
+NFC_ACCESS_GRANTED = False
+
+NFC_ACCESS_TIMEOUT_SECONDS = 5
+
+NFC_ACCESS_GRANTED_AT = None
+
+KNOWN_TAGS = {
+    "0x04 0xA2 0xA8 0x7A 0xFE 0x1D 0x90" : "Black",
+    "0x04 0xB3 0x00 0xB9 0x8F 0x61 0x80" : "Transparent",
+    "0x04 0x3B 0x56 0x42 0xB9 0x11 0x91" : "White"
+    }
+
 def temperature_callback(temperature):
     SENSOR_DATA.temperature.set_current(temperature / 100)
 
@@ -119,19 +131,49 @@ def moisture_callback(moisture):
     SENSOR_DATA.moisture.set_current(moisture / 100)
 
 def cb_reader_state_changed(state, idle, nfc):
+    global NFC_ACCESS_GRANTED, NFC_ACCESS_GRANTED_AT
+
     if state == nfc.READER_STATE_REQUEST_TAG_ID_READY:
         ret = nfc.reader_get_tag_id()
+        tag_id_str = " ".join(map('0x{:02X}'.format, ret.tag_id))
+        print("📡 Found tag with ID:", tag_id_str)
 
-        print("Found tag of type " +
-              str(ret.tag_type) +
-              " with ID [" +
-              " ".join(map(str, map('0x{:02X}'.format, ret.tag_id))) +
-              "]")
+        now = datetime.now()
+
+        # First, always check if master card
+        if tag_id_str.endswith("0x80"):
+            print("✅ Master card detected. Access granted for 10 seconds.")
+            NFC_ACCESS_GRANTED = True
+            NFC_ACCESS_GRANTED_AT = now
+            return
+
+        # Then check if access was previously granted
+        if NFC_ACCESS_GRANTED:
+            elapsed = (now - NFC_ACCESS_GRANTED_AT).total_seconds()
+
+            if elapsed > NFC_ACCESS_TIMEOUT_SECONDS:
+                NFC_ACCESS_GRANTED = False
+                print("⏱️ Access expired. Please scan the master card again.")
+            else:
+                # Access is still valid — allow secondary actions
+                if tag_id_str.endswith("0x91"):
+                    print("✅ White card scanned. Disabling alarm.")
+                    alarm._is_triggered = False
+                    alarm.led_button.set_color(0, 0, 0)
+                    # Optionally reset access after one use
+                    NFC_ACCESS_GRANTED = False
+                else:
+                    print("⚠️ Unknown card scanned during access period.")
+        else:
+            # No master card scanned, and access not granted
+            print("❌ Wrong card! Please scan the master card before trying other cards.")
 
     if idle:
         nfc.reader_request_tag_id()
+
+
         
-    def start_motion_detection():
+def start_motion_detection():
     print("start motion detected")
 
 def end_motion_detection():
@@ -176,14 +218,12 @@ if __name__ == "__main__":
     motion_detection.register_callback(motion_detection.CALLBACK_DETECTION_CYCLE_ENDED, end_motion_detection)
 
     alarm.setup()
-    alarm.trigger_alarm()
 
     count = 0
 
     try:
         while True:
-            pass
-            # clear screen
+             #clear screen
             if os.name == "nt":
                 os.system("cls")
             else:
@@ -193,6 +233,12 @@ if __name__ == "__main__":
 
             print(SENSOR_DATA)
 
+            if NFC_ACCESS_GRANTED:
+                elapsed = (now - NFC_ACCESS_GRANTED_AT).total_seconds()
+                if elapsed > NFC_ACCESS_TIMEOUT_SECONDS:
+                    NFC_ACCESS_GRANTED = False
+                    print("⏱️ Access expired. Please scan the master card again.")
+                
             paper_display.fill_display(paper_display.COLOR_BLACK)
             if count % 20 == 0:
                 for (i, data) in enumerate(SENSOR_DATA):
@@ -211,7 +257,7 @@ if __name__ == "__main__":
                     Discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
                     data.last_notified = now
 
-            time.sleep(100)
+            time.sleep(500)
 
 
     except KeyboardInterrupt:
