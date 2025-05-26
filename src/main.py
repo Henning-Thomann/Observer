@@ -2,7 +2,6 @@ import os
 from datetime import datetime
 
 # discord-notification imports
-import sys
 import http.client
 import json
 import time
@@ -16,6 +15,7 @@ from tinkerforge.bricklet_humidity_v2 import BrickletHumidityV2
 from tinkerforge.bricklet_motion_detector_v2 import BrickletMotionDetectorV2
 from tinkerforge.bricklet_rgb_led_button import BrickletRGBLEDButton
 from tinkerforge.bricklet_e_paper_296x128 import BrickletEPaper296x128
+from tinkerforge.bricklet_lcd_128x64 import BrickletLCD128x64
 
 import time
 
@@ -70,6 +70,9 @@ class SensorData:
         yield self.moisture
 
         return StopIteration
+
+    def __getitem__(self, idx):
+        return list(self)[idx]
 
     def __str__(self):
         return "\n".join([str(data) for data in self])
@@ -148,12 +151,75 @@ def start_motion_detection():
 def end_motion_detection():
     print("stop motion detected")
 
+class LCD_Display:
+    UID = "24Rh"
+
+    def __init__(self, conn):
+        self.lcd = BrickletLCD128x64(LCD_Display.UID, conn)
+        self.current_tab = 1
+
+        # data for the current tab
+        self.graph_data = []
+        self.graph_unit = []
+
+    def setup(self):
+        self.lcd.register_callback(self.lcd.CALLBACK_GUI_TAB_SELECTED, self.select_tab)
+        self.lcd.set_gui_tab_selected_callback_configuration(100, False)
+
+    def select_tab(self, index):
+        if self.current_tab != index:
+            self.current_tab = index
+            self.graph_data = []
+
+    def tick(self, sensor_data):
+        datum = sensor_data[self.current_tab]
+        self.graph_data.append(datum.get_current())
+        self.graph_unit = datum.unit
+
+    def render(self):
+        self.lcd.clear_display()
+        self.lcd.remove_all_gui()
+
+        self.lcd.set_gui_tab_configuration(self.lcd.CHANGE_TAB_ON_CLICK_AND_SWIPE, False)
+
+        self.lcd.set_gui_tab_text(0, "Temp.")
+        self.lcd.set_gui_tab_text(1, "Lumi.")
+        self.lcd.set_gui_tab_text(2, "Moist")
+
+        self.lcd.set_gui_tab_selected(self.current_tab)
+
+        if self.graph_data:
+            # draw graph
+            data_begin = 0 if len(self.graph_data) < 60 else len(self.graph_data) - 60
+
+            data = self.graph_data[data_begin:]
+
+            data_min = min(data)
+            data_max = max(data)
+            def normalize(data):
+                return [int(((x - data_min) / ((data_max - data_min) or 1)) * 240) for x in data]
+
+            self.lcd.set_gui_graph_configuration(0, self.lcd.GRAPH_TYPE_LINE, 50, 0, 60, 52, "t", self.graph_unit)
+            self.lcd.set_gui_graph_data(0, normalize(data))
+
+            self.lcd.draw_text(
+                6, 0,
+                self.lcd.FONT_6X8,
+                self.lcd.COLOR_BLACK,
+                f"{round(data_max, 2)}")
+            self.lcd.draw_text(
+                6, 40,
+                self.lcd.FONT_6X8,
+                self.lcd.COLOR_BLACK,
+                f"{round(data_min, 2)}")
+
 if __name__ == "__main__":
     conn = IPConnection()
 
     # actors
     speaker = BrickletPiezoSpeakerV2("R7M", conn)
     paper_display = BrickletEPaper296x128("XGL", conn)
+    lcd_display = LCD_Display(conn)
 
     # sensors
     ambient_light = BrickletAmbientLightV3("Pdw", conn)
@@ -177,8 +243,8 @@ if __name__ == "__main__":
     motion_detection.register_callback(motion_detection.CALLBACK_MOTION_DETECTED, start_motion_detection)
     motion_detection.register_callback(motion_detection.CALLBACK_DETECTION_CYCLE_ENDED, end_motion_detection)
 
-    alarm.setup()
-    alarm.trigger_alarm()
+    lcd_display.setup()
+    # alarm.trigger_alarm()
 
     count = 0
 
@@ -192,8 +258,12 @@ if __name__ == "__main__":
                 os.system("clear")
 
             now = datetime.now()
+            print(lcd_display.current_tab)
 
             print(SENSOR_DATA)
+
+            lcd_display.tick(SENSOR_DATA)
+            lcd_display.render()
 
             paper_display.fill_display(paper_display.COLOR_BLACK)
             if count % 20 == 0:
