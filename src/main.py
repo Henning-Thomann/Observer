@@ -2,9 +2,6 @@ import os
 from datetime import datetime
 
 # discord-notification imports
-import sys
-import http.client
-import json
 import Discord
 
 from tinkerforge.ip_connection import IPConnection
