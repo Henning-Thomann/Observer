@@ -2,7 +2,6 @@ import os
 from datetime import datetime
 
 # discord-notification imports
-import sys
 import http.client
 import json
 import time
@@ -16,6 +15,7 @@ from tinkerforge.bricklet_humidity_v2 import BrickletHumidityV2
 from tinkerforge.bricklet_motion_detector_v2 import BrickletMotionDetectorV2
 from tinkerforge.bricklet_rgb_led_button import BrickletRGBLEDButton
 from tinkerforge.bricklet_e_paper_296x128 import BrickletEPaper296x128
+from tinkerforge.bricklet_segment_display_4x7_v2 import BrickletSegmentDisplay4x7V2
 
 import time
 
@@ -102,6 +102,10 @@ class Discord:
         # return back to the calling function with the result
         return f"{response.status} {response.reason}\n{result.decode()}"
 
+ALARM = None
+COUNT_DOWN = None
+WAIT_FOR_MOTION = True
+
 class Alarm:
     def __init__(self, conn):
         self.speaker = BrickletPiezoSpeakerV2("R7M", conn)
@@ -112,18 +116,35 @@ class Alarm:
         self.led_button.set_color(0, 0, 0)
         self.led_button.register_callback(self.led_button.CALLBACK_BUTTON_STATE_CHANGED, self.button_callback)
 
-    def trigger_alarm(self):
-        self._is_triggered = True
-        self.led_button.set_color(200, 30, 30)
-
-        while self._is_triggered:
+    def update(self):
+        if self._is_triggered:
             self.speaker.set_alarm(800, 2000, 10, 1, 1, 1000)
-            time.sleep(1)
 
+    def trigger_alarm(self):
+        if not self._is_triggered:
+            self._is_triggered = True
+            self.led_button.set_color(200, 30, 30)
+            
     def button_callback(self, state):
         if (state == self.led_button.BUTTON_STATE_PRESSED):
             self.led_button.set_color(0, 0, 0)
             self._is_triggered = False
+            COUNT_DOWN.allow_cool_down = True
+
+class CountDown:
+    def __init__(self, conn):
+        self.segment_display = BrickletSegmentDisplay4x7V2("Tre", conn)
+        self.segment_display.register_callback(self.segment_display.CALLBACK_COUNTER_FINISHED, self._count_down_ended)
+        self.allow_cool_down = True
+
+    def start_count_down(self, count_down, callback):
+        if self.allow_cool_down:
+            self.allow_cool_down = True
+            self.segment_display.start_counter(count_down, 0, -1, 1000)
+            self._callback = callback
+
+    def _count_down_ended(self):
+        self._callback()
 
 IP = "172.20.10.242"
 PORT = 4223
@@ -143,7 +164,8 @@ def moisture_callback(moisture):
     SENSOR_DATA.moisture.set_current(moisture / 100)
 
 def start_motion_detection():
-    print("start motion detected")
+    print("Start cooldown")
+    COUNT_DOWN.start_count_down(4, ALARM.trigger_alarm)
 
 def end_motion_detection():
     print("stop motion detected")
@@ -156,11 +178,13 @@ if __name__ == "__main__":
     paper_display = BrickletEPaper296x128("XGL", conn)
 
     # sensors
+    ALARM = Alarm(conn)
+    COUNT_DOWN = CountDown(conn)
+
     ambient_light = BrickletAmbientLightV3("Pdw", conn)
     temp = BrickletPTCV2("Wcg", conn)
     moisture_sensore = BrickletHumidityV2("ViW", conn)
     motion_detection = BrickletMotionDetectorV2("ML4", conn)
-    alarm = Alarm(conn);
 
     conn.connect(IP, PORT)
 
@@ -177,8 +201,7 @@ if __name__ == "__main__":
     motion_detection.register_callback(motion_detection.CALLBACK_MOTION_DETECTED, start_motion_detection)
     motion_detection.register_callback(motion_detection.CALLBACK_DETECTION_CYCLE_ENDED, end_motion_detection)
 
-    alarm.setup()
-    alarm.trigger_alarm()
+    ALARM.setup()
 
     count = 0
 
@@ -210,8 +233,10 @@ if __name__ == "__main__":
 
                 notified_seconds_ago = (now - data.last_notified).total_seconds()
                 if(data.is_critical and notified_seconds_ago > NOTIFICATION_DELAY_SECONDS):
-                    Discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
+                    #Discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
                     data.last_notified = now
+
+            ALARM.update()
 
             time.sleep(1)
 
@@ -223,7 +248,7 @@ if __name__ == "__main__":
         conn.disconnect()
         print("\rconnection closed")
 
-        Discord.send(f"""
-            Data before disconnect:
-                {str(SENSOR_DATA)}
-            """)
+        #Discord.send(f"""
+        #    Data before disconnect:
+        #        {str(SENSOR_DATA)}
+        #    """)
