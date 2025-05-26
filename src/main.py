@@ -16,12 +16,9 @@ from tinkerforge.bricklet_humidity_v2 import BrickletHumidityV2
 from tinkerforge.bricklet_motion_detector_v2 import BrickletMotionDetectorV2
 from tinkerforge.bricklet_rgb_led_button import BrickletRGBLEDButton
 from tinkerforge.bricklet_e_paper_296x128 import BrickletEPaper296x128
-<<<<<<< HEAD
 from tinkerforge.bricklet_lcd_128x64 import BrickletLCD128x64
-=======
 from tinkerforge.bricklet_segment_display_4x7_v2 import BrickletSegmentDisplay4x7V2
 from tinkerforge.bricklet_nfc import BrickletNFC
->>>>>>> 0af66c57a3d6196137a1e069f63b1463a719cb57
 
 import time
 
@@ -213,6 +210,7 @@ class LCD_Display:
                 self.lcd.FONT_6X8,
                 self.lcd.COLOR_BLACK,
                 f"{round(data_min, 2)}")
+
 def cb_reader_state_changed(state, idle, nfc):
     if state == nfc.READER_STATE_REQUEST_TAG_ID_READY:
         ret = nfc.reader_get_tag_id()
