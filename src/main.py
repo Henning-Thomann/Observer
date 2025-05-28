@@ -1,23 +1,28 @@
 import os
 from datetime import datetime
 
-import discord
+# discord-notification imports
+import http.client
+import json
 import time
+import Discord
+
+from count_down import CountDown
+from alarm import Alarm
 
 from tinkerforge.ip_connection import IPConnection
 
 from tinkerforge.bricklet_ptc_v2 import BrickletPTCV2
-from tinkerforge.bricklet_piezo_speaker_v2 import BrickletPiezoSpeakerV2
 from tinkerforge.bricklet_ambient_light_v3 import BrickletAmbientLightV3
 from tinkerforge.bricklet_humidity_v2 import BrickletHumidityV2
 from tinkerforge.bricklet_motion_detector_v2 import BrickletMotionDetectorV2
-from tinkerforge.bricklet_rgb_led_button import BrickletRGBLEDButton
+
 from tinkerforge.bricklet_e_paper_296x128 import BrickletEPaper296x128
 from tinkerforge.bricklet_lcd_128x64 import BrickletLCD128x64
-from tinkerforge.bricklet_segment_display_4x7_v2 import BrickletSegmentDisplay4x7V2
 from tinkerforge.bricklet_nfc import BrickletNFC
 
-import time
+from tinkerforge.bricklet_e_paper_296x128 import BrickletEPaper296x128
+from tinkerforge.bricklet_nfc import BrickletNFC
 
 class Statistics:
     def __init__(self, title, unit, min, max, critical_min=None, critical_max=None):
@@ -77,59 +82,15 @@ class SensorData:
     def __str__(self):
         return "\n".join([str(data) for data in self])
 
-
-
 ALARM = None
 COUNT_DOWN = None
-WAIT_FOR_MOTION = True
-
-class Alarm:
-    def __init__(self, conn):
-        self.speaker = BrickletPiezoSpeakerV2("R7M", conn)
-        self.led_button = BrickletRGBLEDButton("23Qx", conn)
-        self._is_triggered = False
-
-    def setup(self):
-        self.led_button.set_color(0, 0, 0)
-        self.led_button.register_callback(self.led_button.CALLBACK_BUTTON_STATE_CHANGED, self.button_callback)
-
-    def update(self):
-        if self._is_triggered:
-            self.speaker.set_alarm(800, 2000, 10, 1, 1, 1000)
-
-    def trigger_alarm(self):
-        if not self._is_triggered:
-            self._is_triggered = True
-            self.led_button.set_color(200, 30, 30)
-
-    def button_callback(self, state):
-        if (state == self.led_button.BUTTON_STATE_PRESSED):
-            self.led_button.set_color(0, 0, 0)
-            self._is_triggered = False
-            COUNT_DOWN.allow_cool_down = True
-
-class CountDown:
-    def __init__(self, conn):
-        self.segment_display = BrickletSegmentDisplay4x7V2("Tre", conn)
-        self.segment_display.register_callback(self.segment_display.CALLBACK_COUNTER_FINISHED, self._count_down_ended)
-        self.allow_cool_down = True
-
-    def start_count_down(self, count_down, callback):
-        if self.allow_cool_down:
-            self.allow_cool_down = True
-            self.segment_display.start_counter(count_down, 0, -1, 1000)
-            self._callback = callback
-
-    def _count_down_ended(self):
-        self._callback()
+SENSOR_DATA = SensorData()
 
 IP = "172.20.10.242"
 PORT = 4223
 
 # delay between notification when a critical measurement is taken
 NOTIFICATION_DELAY_SECONDS = 60 * 5
-
-SENSOR_DATA = SensorData()
 
 def temperature_callback(temperature):
     SENSOR_DATA.temperature.set_current(temperature / 100)
@@ -141,7 +102,8 @@ def moisture_callback(moisture):
     SENSOR_DATA.moisture.set_current(moisture / 100)
 
 def start_motion_detection():
-    COUNT_DOWN.start_count_down(4, ALARM.trigger_alarm)
+    if ALARM.can_trigger():
+        COUNT_DOWN.start_count_down(10, ALARM.trigger_alarm)
 
 def end_motion_detection():
     print("stop motion detected")
@@ -225,20 +187,18 @@ if __name__ == "__main__":
     conn = IPConnection()
 
     # actors
-    speaker = BrickletPiezoSpeakerV2("R7M", conn)
     paper_display = BrickletEPaper296x128("XGL", conn)
     lcd_display = LCD_Display(conn)
 
     # sensors
-    ALARM = Alarm(conn)
     COUNT_DOWN = CountDown(conn)
+    ALARM = Alarm(conn, COUNT_DOWN, 60)
 
+    motion_detection = BrickletMotionDetectorV2("ML4", conn)
     ambient_light = BrickletAmbientLightV3("Pdw", conn)
     temperature = BrickletPTCV2("Wcg", conn)
     moisture_sensor = BrickletHumidityV2("ViW", conn)
     nfc = BrickletNFC("22ND", conn)
-  
-    motion_detection = BrickletMotionDetectorV2("ML4", conn)
 
     conn.connect(IP, PORT)
 
@@ -256,7 +216,6 @@ if __name__ == "__main__":
                           lambda x, y: cb_reader_state_changed(x, y, nfc))
     nfc.set_mode(nfc.MODE_READER)
     
-    
     motion_detection.register_callback(motion_detection.CALLBACK_MOTION_DETECTED, start_motion_detection)
     motion_detection.register_callback(motion_detection.CALLBACK_DETECTION_CYCLE_ENDED, end_motion_detection)
 
@@ -267,7 +226,6 @@ if __name__ == "__main__":
 
     try:
         while True:
-            pass
             # clear screen
             if os.name == "nt":
                 os.system("cls")
@@ -302,7 +260,7 @@ if __name__ == "__main__":
 
             ALARM.update()
 
-            time.sleep(100)
+            time.sleep(0.1)
 
     except KeyboardInterrupt:
         # the user ended the program so we absorb the exception
