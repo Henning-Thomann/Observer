@@ -1,10 +1,11 @@
-import os
+ import os
 from datetime import datetime
 
 # discord-notification imports
+import http.client
+import json
 import Discord
 import time
-
 
 from tinkerforge.ip_connection import IPConnection
 
@@ -15,9 +16,9 @@ from tinkerforge.bricklet_humidity_v2 import BrickletHumidityV2
 from tinkerforge.bricklet_motion_detector_v2 import BrickletMotionDetectorV2
 from tinkerforge.bricklet_rgb_led_button import BrickletRGBLEDButton
 from tinkerforge.bricklet_e_paper_296x128 import BrickletEPaper296x128
+from tinkerforge.bricklet_lcd_128x64 import BrickletLCD128x64
+from tinkerforge.bricklet_segment_display_4x7_v2 import BrickletSegmentDisplay4x7V2
 from tinkerforge.bricklet_nfc import BrickletNFC
-
-
 
 import time
 
@@ -73,10 +74,17 @@ class SensorData:
 
         return StopIteration
 
+    def __getitem__(self, idx):
+        return list(self)[idx]
+
     def __str__(self):
         return "\n".join([str(data) for data in self])
 
 
+
+ALARM = None
+COUNT_DOWN = None
+WAIT_FOR_MOTION = True
 
 class Alarm:
     def __init__(self, conn):
@@ -88,18 +96,60 @@ class Alarm:
         self.led_button.set_color(0, 0, 0)
         self.led_button.register_callback(self.led_button.CALLBACK_BUTTON_STATE_CHANGED, self.button_callback)
 
-    def trigger_alarm(self):
-        self._is_triggered = True
-        self.led_button.set_color(200, 30, 30)
-
-        while self._is_triggered:
+    def update(self):
+        if self._is_triggered:
             self.speaker.set_alarm(800, 2000, 10, 1, 1, 1000)
-            time.sleep(1)
+
+    def trigger_alarm(self):
+        if not self._is_triggered:
+            self._is_triggered = True
+            self.led_button.set_color(200, 30, 30)
 
     def button_callback(self, state):
         if (state == self.led_button.BUTTON_STATE_PRESSED):
+            print("Button pressed - resetting alarm and enabling motion detection")
             self.led_button.set_color(0, 0, 0)
             self._is_triggered = False
+            # Button-Press soll das System wieder in den normalen Zustand versetzen
+            COUNT_DOWN.enable_motion_detection()
+
+    def reset_alarm(self):
+        self._is_triggered = False
+        self.led_button.set_color(0,0,0)
+        self.speaker.set_alarm(800,2000,10,1,10,0)
+
+class CountDown:
+    def __init__(self, conn):
+        self.segment_display = BrickletSegmentDisplay4x7V2("Tre", conn)
+        self.segment_display.register_callback(self.segment_display.CALLBACK_COUNTER_FINISHED, self._count_down_ended)
+        self.allow_cool_down = True
+        self._callback = None
+
+    def start_count_down(self, count_down, callback):
+        if self.allow_cool_down:
+            self.allow_cool_down = True
+            self.segment_display.start_counter(count_down, 0, -1, 1000)
+            self._callback = callback
+
+    def _count_down_ended(self):
+        if self._callback:
+            self._callback()
+            self._callback = None
+
+    def stop_count_down(self):
+        print("Stopping countdown")
+        self.segment_display.set_numeric_value([0,0,0,0])
+        self._callback = None
+
+    def disable_motion_detection(self):
+        """Deaktiviert Motion Detection (nach NFC-Scan)"""
+        self.motion_detection_enabled = False
+        print("Motion detection disabled")
+
+    def enable_motion_detection(self):
+        """Aktiviert Motion Detection wieder (nach Button-Press)"""
+        self.motion_detection_enabled = True
+        print("Motion detection enabled")
 
 IP = "172.20.10.242"
 PORT = 4223
@@ -108,18 +158,7 @@ PORT = 4223
 NOTIFICATION_DELAY_SECONDS = 60 * 5
 
 SENSOR_DATA = SensorData()
-
-NFC_ACCESS_GRANTED = False
-
-NFC_ACCESS_TIMEOUT_SECONDS = 5
-
-NFC_ACCESS_GRANTED_AT = None
-
-KNOWN_TAGS = {
-    "0x04 0xA2 0xA8 0x7A 0xFE 0x1D 0x90" : "Black",
-    "0x04 0xB3 0x00 0xB9 0x8F 0x61 0x80" : "Transparent",
-    "0x04 0x3B 0x56 0x42 0xB9 0x11 0x91" : "White"
-    }
+VALID_NFC_ID_SUFFIX = 0x90
 
 def temperature_callback(temperature):
     SENSOR_DATA.temperature.set_current(temperature / 100)
@@ -130,54 +169,96 @@ def ambient_light_callback(illuminance):
 def moisture_callback(moisture):
     SENSOR_DATA.moisture.set_current(moisture / 100)
 
-def cb_reader_state_changed(state, idle, nfc):
-    global NFC_ACCESS_GRANTED, NFC_ACCESS_GRANTED_AT
-
-    if state == nfc.READER_STATE_REQUEST_TAG_ID_READY:
-        ret = nfc.reader_get_tag_id()
-        tag_id_str = " ".join(map('0x{:02X}'.format, ret.tag_id))
-        print("📡 Found tag with ID:", tag_id_str)
-
-        now = datetime.now()
-
-        # First, always check if master card
-        if tag_id_str.endswith("0x80"):
-            print("✅ Master card detected. Access granted for 10 seconds.")
-            NFC_ACCESS_GRANTED = True
-            NFC_ACCESS_GRANTED_AT = now
-            return
-
-        # Then check if access was previously granted
-        if NFC_ACCESS_GRANTED:
-            elapsed = (now - NFC_ACCESS_GRANTED_AT).total_seconds()
-
-            if elapsed > NFC_ACCESS_TIMEOUT_SECONDS:
-                NFC_ACCESS_GRANTED = False
-                print("⏱️ Access expired. Please scan the master card again.")
-            else:
-                # Access is still valid — allow secondary actions
-                if tag_id_str.endswith("0x91"):
-                    print("✅ White card scanned. Disabling alarm.")
-                    alarm._is_triggered = False
-                    alarm.led_button.set_color(0, 0, 0)
-                    # Optionally reset access after one use
-                    NFC_ACCESS_GRANTED = False
-                else:
-                    print("⚠️ Unknown card scanned during access period.")
-        else:
-            # No master card scanned, and access not granted
-            print("❌ Wrong card! Please scan the master card before trying other cards.")
-
-    if idle:
-        nfc.reader_request_tag_id()
-
-
-        
 def start_motion_detection():
-    print("start motion detected")
+    COUNT_DOWN.start_count_down(4, ALARM.trigger_alarm)
 
 def end_motion_detection():
     print("stop motion detected")
+
+class LCD_Display:
+    UID = "24Rh"
+
+    def __init__(self, conn):
+        self.lcd = BrickletLCD128x64(LCD_Display.UID, conn)
+        self.current_tab = 1
+
+        # data for the current tab
+        self.graph_data = []
+        self.graph_unit = []
+
+    def setup(self):
+        self.lcd.register_callback(self.lcd.CALLBACK_GUI_TAB_SELECTED, self.select_tab)
+        self.lcd.set_gui_tab_selected_callback_configuration(100, False)
+
+    def select_tab(self, index):
+        if self.current_tab != index:
+            self.current_tab = index
+            self.graph_data = []
+
+    def tick(self, sensor_data):
+        datum = sensor_data[self.current_tab]
+        self.graph_data.append(datum.get_current())
+        self.graph_unit = datum.unit
+
+    def render(self):
+        self.lcd.clear_display()
+        self.lcd.remove_all_gui()
+
+        self.lcd.set_gui_tab_configuration(self.lcd.CHANGE_TAB_ON_CLICK_AND_SWIPE, False)
+
+        self.lcd.set_gui_tab_text(0, "Temp.")
+        self.lcd.set_gui_tab_text(1, "Lumi.")
+        self.lcd.set_gui_tab_text(2, "Moist")
+
+        self.lcd.set_gui_tab_selected(self.current_tab)
+
+        if self.graph_data:
+            # draw graph
+            data_begin = 0 if len(self.graph_data) < 60 else len(self.graph_data) - 60
+
+            data = self.graph_data[data_begin:]
+
+            data_min = min(data)
+            data_max = max(data)
+            def normalize(data):
+                return [int(((x - data_min) / ((data_max - data_min) or 1)) * 240) for x in data]
+
+            self.lcd.set_gui_graph_configuration(0, self.lcd.GRAPH_TYPE_LINE, 50, 0, 60, 52, "t", self.graph_unit)
+            self.lcd.set_gui_graph_data(0, normalize(data))
+
+            self.lcd.draw_text(
+                6, 0,
+                self.lcd.FONT_6X8,
+                self.lcd.COLOR_BLACK,
+                f"{round(data_max, 2)}")
+            self.lcd.draw_text(
+                6, 40,
+                self.lcd.FONT_6X8,
+                self.lcd.COLOR_BLACK,
+                f"{round(data_min, 2)}")
+
+def cb_reader_state_changed(state, idle, nfc):
+    global COUNT_DOWN, ALARM
+    if state == nfc.READER_STATE_REQUEST_TAG_ID_READY:
+        ret = nfc.reader_get_tag_id()
+        tag_id = list(ret.tag_id)
+
+        print("Found tag of type " +
+              str(ret.tag_type) +
+              " with ID [" +
+              " ".join(map(str, map('0x{:02X}'.format, ret.tag_id))) +
+              "]")
+
+        if tag_id[-1] == VALID_NFC_ID_SUFFIX:
+            print("Valid NFC card scanned - Stopping countdown and disabling motion detection")
+            COUNT_DOWN.stop_count_down()
+            ALARM.reset_alarm()
+            COUNT_DOWN.disable_motion_detection()  # Verwende die neue Methode!
+        else:
+            print("Scanned card doesn't match Whitelist. Try another card")
+
+    if idle:
+        nfc.reader_request_tag_id()
 
 if __name__ == "__main__":
     conn = IPConnection()
@@ -185,29 +266,30 @@ if __name__ == "__main__":
     # actors
     speaker = BrickletPiezoSpeakerV2("R7M", conn)
     paper_display = BrickletEPaper296x128("XGL", conn)
+    lcd_display = LCD_Display(conn)
 
     # sensors
+    ALARM = Alarm(conn)
+    COUNT_DOWN = CountDown(conn)
+
     ambient_light = BrickletAmbientLightV3("Pdw", conn)
-    temp = BrickletPTCV2("Wcg", conn)
-    moisture_sensore = BrickletHumidityV2("ViW", conn)
+    temperature = BrickletPTCV2("Wcg", conn)
+    moisture_sensor = BrickletHumidityV2("ViW", conn)
     nfc = BrickletNFC("22ND", conn)
   
     motion_detection = BrickletMotionDetectorV2("ML4", conn)
-    alarm = Alarm(conn);
-
 
     conn.connect(IP, PORT)
 
-
     # register callbacks
-    temp.register_callback(temp.CALLBACK_TEMPERATURE, temperature_callback)
-    temp.set_temperature_callback_configuration(1000, False, "x", 0, 0)
+    temperature.register_callback(temperature.CALLBACK_TEMPERATURE, temperature_callback)
+    temperature.set_temperature_callback_configuration(1000, False, "x", 0, 0)
 
     ambient_light.register_callback(ambient_light.CALLBACK_ILLUMINANCE, ambient_light_callback)
     ambient_light.set_illuminance_callback_configuration(1000, False, "x", 0, 0)
 
-    moisture_sensore.register_callback(moisture_sensore.CALLBACK_HUMIDITY, moisture_callback)
-    moisture_sensore.set_humidity_callback_configuration(1000, False, "x", 0, 0)
+    moisture_sensor.register_callback(moisture_sensor.CALLBACK_HUMIDITY, moisture_callback)
+    moisture_sensor.set_humidity_callback_configuration(1000, False, "x", 0, 0)
 
     nfc.register_callback(nfc.CALLBACK_READER_STATE_CHANGED,
                           lambda x, y: cb_reader_state_changed(x, y, nfc))
@@ -217,28 +299,27 @@ if __name__ == "__main__":
     motion_detection.register_callback(motion_detection.CALLBACK_MOTION_DETECTED, start_motion_detection)
     motion_detection.register_callback(motion_detection.CALLBACK_DETECTION_CYCLE_ENDED, end_motion_detection)
 
-    alarm.setup()
+    lcd_display.setup()
+    ALARM.setup()
 
     count = 0
 
     try:
         while True:
-             #clear screen
+            # clear screen
             if os.name == "nt":
                 os.system("cls")
             else:
                 os.system("clear")
 
             now = datetime.now()
+            print(lcd_display.current_tab)
 
             print(SENSOR_DATA)
 
-            if NFC_ACCESS_GRANTED:
-                elapsed = (now - NFC_ACCESS_GRANTED_AT).total_seconds()
-                if elapsed > NFC_ACCESS_TIMEOUT_SECONDS:
-                    NFC_ACCESS_GRANTED = False
-                    print("⏱️ Access expired. Please scan the master card again.")
-                
+            lcd_display.tick(SENSOR_DATA)
+            #lcd_display.render()
+
             paper_display.fill_display(paper_display.COLOR_BLACK)
             if count % 20 == 0:
                 for (i, data) in enumerate(SENSOR_DATA):
@@ -257,8 +338,9 @@ if __name__ == "__main__":
                     Discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
                     data.last_notified = now
 
-            time.sleep(500)
+            ALARM.update()
 
+            time.sleep(100)
 
     except KeyboardInterrupt:
         # the user ended the program so we absorb the exception
