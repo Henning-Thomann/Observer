@@ -5,8 +5,8 @@ from datetime import datetime
 import http.client
 import json
 import time
+import Discord
 
-#import Discord
 from count_down import CountDown
 from alarm import Alarm
 
@@ -16,6 +16,10 @@ from tinkerforge.bricklet_ptc_v2 import BrickletPTCV2
 from tinkerforge.bricklet_ambient_light_v3 import BrickletAmbientLightV3
 from tinkerforge.bricklet_humidity_v2 import BrickletHumidityV2
 from tinkerforge.bricklet_motion_detector_v2 import BrickletMotionDetectorV2
+
+from tinkerforge.bricklet_e_paper_296x128 import BrickletEPaper296x128
+from tinkerforge.bricklet_lcd_128x64 import BrickletLCD128x64
+from tinkerforge.bricklet_nfc import BrickletNFC
 
 from tinkerforge.bricklet_e_paper_296x128 import BrickletEPaper296x128
 from tinkerforge.bricklet_nfc import BrickletNFC
@@ -72,6 +76,9 @@ class SensorData:
 
         return StopIteration
 
+    def __getitem__(self, idx):
+        return list(self)[idx]
+
     def __str__(self):
         return "\n".join([str(data) for data in self])
 
@@ -101,6 +108,68 @@ def start_motion_detection():
 def end_motion_detection():
     print("stop motion detected")
 
+class LCD_Display:
+    UID = "24Rh"
+
+    def __init__(self, conn):
+        self.lcd = BrickletLCD128x64(LCD_Display.UID, conn)
+        self.current_tab = 1
+
+        # data for the current tab
+        self.graph_data = []
+        self.graph_unit = []
+
+    def setup(self):
+        self.lcd.register_callback(self.lcd.CALLBACK_GUI_TAB_SELECTED, self.select_tab)
+        self.lcd.set_gui_tab_selected_callback_configuration(100, False)
+
+    def select_tab(self, index):
+        if self.current_tab != index:
+            self.current_tab = index
+            self.graph_data = []
+
+    def tick(self, sensor_data):
+        datum = sensor_data[self.current_tab]
+        self.graph_data.append(datum.get_current())
+        self.graph_unit = datum.unit
+
+    def render(self):
+        self.lcd.clear_display()
+        self.lcd.remove_all_gui()
+
+        self.lcd.set_gui_tab_configuration(self.lcd.CHANGE_TAB_ON_CLICK_AND_SWIPE, False)
+
+        self.lcd.set_gui_tab_text(0, "Temp.")
+        self.lcd.set_gui_tab_text(1, "Lumi.")
+        self.lcd.set_gui_tab_text(2, "Moist")
+
+        self.lcd.set_gui_tab_selected(self.current_tab)
+
+        if self.graph_data:
+            # draw graph
+            data_begin = 0 if len(self.graph_data) < 60 else len(self.graph_data) - 60
+
+            data = self.graph_data[data_begin:]
+
+            data_min = min(data)
+            data_max = max(data)
+            def normalize(data):
+                return [int(((x - data_min) / ((data_max - data_min) or 1)) * 240) for x in data]
+
+            self.lcd.set_gui_graph_configuration(0, self.lcd.GRAPH_TYPE_LINE, 50, 0, 60, 52, "t", self.graph_unit)
+            self.lcd.set_gui_graph_data(0, normalize(data))
+
+            self.lcd.draw_text(
+                6, 0,
+                self.lcd.FONT_6X8,
+                self.lcd.COLOR_BLACK,
+                f"{round(data_max, 2)}")
+            self.lcd.draw_text(
+                6, 40,
+                self.lcd.FONT_6X8,
+                self.lcd.COLOR_BLACK,
+                f"{round(data_min, 2)}")
+
 def cb_reader_state_changed(state, idle, nfc):
     if state == nfc.READER_STATE_REQUEST_TAG_ID_READY:
         ret = nfc.reader_get_tag_id()
@@ -119,6 +188,7 @@ if __name__ == "__main__":
 
     # actors
     paper_display = BrickletEPaper296x128("XGL", conn)
+    lcd_display = LCD_Display(conn)
 
     # sensors
     COUNT_DOWN = CountDown(conn)
@@ -126,21 +196,21 @@ if __name__ == "__main__":
 
     motion_detection = BrickletMotionDetectorV2("ML4", conn)
     ambient_light = BrickletAmbientLightV3("Pdw", conn)
-    temp = BrickletPTCV2("Wcg", conn)
-    moisture_sensore = BrickletHumidityV2("ViW", conn)
+    temperature = BrickletPTCV2("Wcg", conn)
+    moisture_sensor = BrickletHumidityV2("ViW", conn)
     nfc = BrickletNFC("22ND", conn)
 
     conn.connect(IP, PORT)
 
     # register callbacks
-    temp.register_callback(temp.CALLBACK_TEMPERATURE, temperature_callback)
-    temp.set_temperature_callback_configuration(1000, False, "x", 0, 0)
+    temperature.register_callback(temperature.CALLBACK_TEMPERATURE, temperature_callback)
+    temperature.set_temperature_callback_configuration(1000, False, "x", 0, 0)
 
     ambient_light.register_callback(ambient_light.CALLBACK_ILLUMINANCE, ambient_light_callback)
     ambient_light.set_illuminance_callback_configuration(1000, False, "x", 0, 0)
 
-    moisture_sensore.register_callback(moisture_sensore.CALLBACK_HUMIDITY, moisture_callback)
-    moisture_sensore.set_humidity_callback_configuration(1000, False, "x", 0, 0)
+    moisture_sensor.register_callback(moisture_sensor.CALLBACK_HUMIDITY, moisture_callback)
+    moisture_sensor.set_humidity_callback_configuration(1000, False, "x", 0, 0)
 
     nfc.register_callback(nfc.CALLBACK_READER_STATE_CHANGED,
                           lambda x, y: cb_reader_state_changed(x, y, nfc))
@@ -149,6 +219,7 @@ if __name__ == "__main__":
     motion_detection.register_callback(motion_detection.CALLBACK_MOTION_DETECTED, start_motion_detection)
     motion_detection.register_callback(motion_detection.CALLBACK_DETECTION_CYCLE_ENDED, end_motion_detection)
 
+    lcd_display.setup()
     ALARM.setup()
 
     count = 0
@@ -162,8 +233,12 @@ if __name__ == "__main__":
                 os.system("clear")
 
             now = datetime.now()
+            print(lcd_display.current_tab)
 
             print(SENSOR_DATA)
+
+            lcd_display.tick(SENSOR_DATA)
+            lcd_display.render()
 
             paper_display.fill_display(paper_display.COLOR_BLACK)
             if count % 20 == 0:
@@ -180,7 +255,7 @@ if __name__ == "__main__":
 
                 notified_seconds_ago = (now - data.last_notified).total_seconds()
                 if(data.is_critical and notified_seconds_ago > NOTIFICATION_DELAY_SECONDS):
-                    #Discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
+                    Discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
                     data.last_notified = now
 
             ALARM.update()
@@ -195,7 +270,7 @@ if __name__ == "__main__":
         conn.disconnect()
         print("\rconnection closed")
 
-        #Discord.send(f"""
-        #    Data before disconnect:
-        #        {str(SENSOR_DATA)}
-        #    """)
+        Discord.send(f"""
+            Data before disconnect:
+                {str(SENSOR_DATA)}
+            """)
