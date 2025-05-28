@@ -5,7 +5,7 @@ from datetime import datetime
 import http.client
 import json
 import time
-import Discord
+import discord
 
 from count_down import CountDown
 from alarm import Alarm
