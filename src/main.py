@@ -1,10 +1,7 @@
 import os
 from datetime import datetime
 
-# discord-notification imports
-import http.client
-import json
-import Discord
+import discord
 import time
 
 from tinkerforge.ip_connection import IPConnection
@@ -300,7 +297,7 @@ if __name__ == "__main__":
 
                 notified_seconds_ago = (now - data.last_notified).total_seconds()
                 if(data.is_critical and notified_seconds_ago > NOTIFICATION_DELAY_SECONDS):
-                    Discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
+                    discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
                     data.last_notified = now
 
             ALARM.update()
@@ -315,7 +312,7 @@ if __name__ == "__main__":
         conn.disconnect()
         print("\rconnection closed")
 
-        Discord.send(f"""
+        discord.send(f"""
             Data before disconnect:
                 {str(SENSOR_DATA)}
             """)

@@ -1,1 +1,6 @@
 tinkerforge
+discord.py
+vizdoom
+pillow
+numpy
+opencv-python

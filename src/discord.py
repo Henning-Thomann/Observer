@@ -1,4 +1,3 @@
-import sys
 import http.client
 import json
 
