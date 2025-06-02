@@ -1,26 +1,25 @@
- import os
+import os
 from datetime import datetime
 
 # discord-notification imports
 import http.client
 import json
-import Discord
 import time
+import discord
+
+from count_down import CountDown
+from alarm import Alarm
+from nfc_reader import NfcReader
+from motion_detection import MotionDetection
 
 from tinkerforge.ip_connection import IPConnection
 
 from tinkerforge.bricklet_ptc_v2 import BrickletPTCV2
-from tinkerforge.bricklet_piezo_speaker_v2 import BrickletPiezoSpeakerV2
 from tinkerforge.bricklet_ambient_light_v3 import BrickletAmbientLightV3
 from tinkerforge.bricklet_humidity_v2 import BrickletHumidityV2
-from tinkerforge.bricklet_motion_detector_v2 import BrickletMotionDetectorV2
-from tinkerforge.bricklet_rgb_led_button import BrickletRGBLEDButton
+
 from tinkerforge.bricklet_e_paper_296x128 import BrickletEPaper296x128
 from tinkerforge.bricklet_lcd_128x64 import BrickletLCD128x64
-from tinkerforge.bricklet_segment_display_4x7_v2 import BrickletSegmentDisplay4x7V2
-from tinkerforge.bricklet_nfc import BrickletNFC
-
-import time
 
 class Statistics:
     def __init__(self, title, unit, min, max, critical_min=None, critical_max=None):
@@ -80,85 +79,13 @@ class SensorData:
     def __str__(self):
         return "\n".join([str(data) for data in self])
 
-
-
-ALARM = None
-COUNT_DOWN = None
-WAIT_FOR_MOTION = True
-
-class Alarm:
-    def __init__(self, conn):
-        self.speaker = BrickletPiezoSpeakerV2("R7M", conn)
-        self.led_button = BrickletRGBLEDButton("23Qx", conn)
-        self._is_triggered = False
-
-    def setup(self):
-        self.led_button.set_color(0, 0, 0)
-        self.led_button.register_callback(self.led_button.CALLBACK_BUTTON_STATE_CHANGED, self.button_callback)
-
-    def update(self):
-        if self._is_triggered:
-            self.speaker.set_alarm(800, 2000, 10, 1, 1, 1000)
-
-    def trigger_alarm(self):
-        if not self._is_triggered:
-            self._is_triggered = True
-            self.led_button.set_color(200, 30, 30)
-
-    def button_callback(self, state):
-        if (state == self.led_button.BUTTON_STATE_PRESSED):
-            print("Button pressed - resetting alarm and enabling motion detection")
-            self.led_button.set_color(0, 0, 0)
-            self._is_triggered = False
-            # Button-Press soll das System wieder in den normalen Zustand versetzen
-            COUNT_DOWN.enable_motion_detection()
-
-    def reset_alarm(self):
-        self._is_triggered = False
-        self.led_button.set_color(0,0,0)
-        self.speaker.set_alarm(800,2000,10,1,10,0)
-
-class CountDown:
-    def __init__(self, conn):
-        self.segment_display = BrickletSegmentDisplay4x7V2("Tre", conn)
-        self.segment_display.register_callback(self.segment_display.CALLBACK_COUNTER_FINISHED, self._count_down_ended)
-        self.allow_cool_down = True
-        self._callback = None
-
-    def start_count_down(self, count_down, callback):
-        if self.allow_cool_down:
-            self.allow_cool_down = True
-            self.segment_display.start_counter(count_down, 0, -1, 1000)
-            self._callback = callback
-
-    def _count_down_ended(self):
-        if self._callback:
-            self._callback()
-            self._callback = None
-
-    def stop_count_down(self):
-        print("Stopping countdown")
-        self.segment_display.set_numeric_value([0,0,0,0])
-        self._callback = None
-
-    def disable_motion_detection(self):
-        """Deaktiviert Motion Detection (nach NFC-Scan)"""
-        self.motion_detection_enabled = False
-        print("Motion detection disabled")
-
-    def enable_motion_detection(self):
-        """Aktiviert Motion Detection wieder (nach Button-Press)"""
-        self.motion_detection_enabled = True
-        print("Motion detection enabled")
+SENSOR_DATA = SensorData()
 
 IP = "172.20.10.242"
 PORT = 4223
 
 # delay between notification when a critical measurement is taken
 NOTIFICATION_DELAY_SECONDS = 60 * 5
-
-SENSOR_DATA = SensorData()
-VALID_NFC_ID_SUFFIX = 0x90
 
 def temperature_callback(temperature):
     SENSOR_DATA.temperature.set_current(temperature / 100)
@@ -168,12 +95,6 @@ def ambient_light_callback(illuminance):
 
 def moisture_callback(moisture):
     SENSOR_DATA.moisture.set_current(moisture / 100)
-
-def start_motion_detection():
-    COUNT_DOWN.start_count_down(4, ALARM.trigger_alarm)
-
-def end_motion_detection():
-    print("stop motion detected")
 
 class LCD_Display:
     UID = "24Rh"
@@ -237,47 +158,22 @@ class LCD_Display:
                 self.lcd.COLOR_BLACK,
                 f"{round(data_min, 2)}")
 
-def cb_reader_state_changed(state, idle, nfc):
-    global COUNT_DOWN, ALARM
-    if state == nfc.READER_STATE_REQUEST_TAG_ID_READY:
-        ret = nfc.reader_get_tag_id()
-        tag_id = list(ret.tag_id)
-
-        print("Found tag of type " +
-              str(ret.tag_type) +
-              " with ID [" +
-              " ".join(map(str, map('0x{:02X}'.format, ret.tag_id))) +
-              "]")
-
-        if tag_id[-1] == VALID_NFC_ID_SUFFIX:
-            print("Valid NFC card scanned - Stopping countdown and disabling motion detection")
-            COUNT_DOWN.stop_count_down()
-            ALARM.reset_alarm()
-            COUNT_DOWN.disable_motion_detection()  # Verwende die neue Methode!
-        else:
-            print("Scanned card doesn't match Whitelist. Try another card")
-
-    if idle:
-        nfc.reader_request_tag_id()
-
 if __name__ == "__main__":
     conn = IPConnection()
 
     # actors
-    speaker = BrickletPiezoSpeakerV2("R7M", conn)
     paper_display = BrickletEPaper296x128("XGL", conn)
     lcd_display = LCD_Display(conn)
 
     # sensors
-    ALARM = Alarm(conn)
-    COUNT_DOWN = CountDown(conn)
+    count_down = CountDown(conn)
+    alarm = Alarm(conn, count_down, 60)
+    nfc_reader = NfcReader(conn, count_down, alarm)
+    motion_detection = MotionDetection(conn, count_down, alarm)
 
     ambient_light = BrickletAmbientLightV3("Pdw", conn)
     temperature = BrickletPTCV2("Wcg", conn)
     moisture_sensor = BrickletHumidityV2("ViW", conn)
-    nfc = BrickletNFC("22ND", conn)
-  
-    motion_detection = BrickletMotionDetectorV2("ML4", conn)
 
     conn.connect(IP, PORT)
 
@@ -291,16 +187,10 @@ if __name__ == "__main__":
     moisture_sensor.register_callback(moisture_sensor.CALLBACK_HUMIDITY, moisture_callback)
     moisture_sensor.set_humidity_callback_configuration(1000, False, "x", 0, 0)
 
-    nfc.register_callback(nfc.CALLBACK_READER_STATE_CHANGED,
-                          lambda x, y: cb_reader_state_changed(x, y, nfc))
-    nfc.set_mode(nfc.MODE_READER)
-    
-    
-    motion_detection.register_callback(motion_detection.CALLBACK_MOTION_DETECTED, start_motion_detection)
-    motion_detection.register_callback(motion_detection.CALLBACK_DETECTION_CYCLE_ENDED, end_motion_detection)
-
     lcd_display.setup()
-    ALARM.setup()
+    alarm.setup()
+    nfc_reader.setup()
+    motion_detection.setup()
 
     count = 0
 
@@ -318,7 +208,7 @@ if __name__ == "__main__":
             print(SENSOR_DATA)
 
             lcd_display.tick(SENSOR_DATA)
-            #lcd_display.render()
+            lcd_display.render()
 
             paper_display.fill_display(paper_display.COLOR_BLACK)
             if count % 20 == 0:
@@ -335,12 +225,12 @@ if __name__ == "__main__":
 
                 notified_seconds_ago = (now - data.last_notified).total_seconds()
                 if(data.is_critical and notified_seconds_ago > NOTIFICATION_DELAY_SECONDS):
-                    Discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
+                    discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
                     data.last_notified = now
 
-            ALARM.update()
+            alarm.update()
 
-            time.sleep(100)
+            time.sleep(0.1)
 
     except KeyboardInterrupt:
         # the user ended the program so we absorb the exception
@@ -350,7 +240,7 @@ if __name__ == "__main__":
         conn.disconnect()
         print("\rconnection closed")
 
-        Discord.send(f"""
+        discord.send(f"""
             Data before disconnect:
                 {str(SENSOR_DATA)}
             """)

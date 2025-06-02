@@ -1,2 +1,4 @@
 venv
 wh.dat
+_vizdoom*
+src/__pycache__
