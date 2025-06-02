@@ -31,7 +31,16 @@ class Alarm:
             
     def button_callback(self, state):
         if (state == self.led_button.BUTTON_STATE_PRESSED):
+            print("Button pressed - resetting alarm and enabling motion detection")
+
             self._trigger_timeout_start = datetime.now();
             self.led_button.set_color(0, 0, 0)
             self._is_triggered = False
-            self._count_down.allow_cool_down = True
+
+            # Button-Press soll das System wieder in den normalen Zustand versetzen
+            self._count_down.enable_motion_detection()
+    
+    def reset_alarm(self):
+        self._is_triggered = False
+        self.led_button.set_color(0,0,0)
+        self.speaker.set_alarm(800,2000,10,1,10,0)

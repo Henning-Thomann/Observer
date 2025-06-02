@@ -13,4 +13,21 @@ class CountDown:
             self._callback = callback
 
     def _count_down_ended(self):
-        self._callback()
+        if self._callback:
+            self._callback()
+            self._callback = None
+
+    def stop_count_down(self):
+        print("Stopping countdown")
+        self.segment_display.set_numeric_value([0,0,0,0])
+        self._callback = None
+
+    def disable_motion_detection(self):
+        """Deaktiviert Motion Detection (nach NFC-Scan)"""
+        self.motion_detection_enabled = False
+        print("Motion detection disabled")
+
+    def enable_motion_detection(self):
+        """Aktiviert Motion Detection wieder (nach Button-Press)"""
+        self.motion_detection_enabled = True
+        print("Motion detection enabled")
