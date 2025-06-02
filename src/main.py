@@ -9,20 +9,17 @@ import discord
 
 from count_down import CountDown
 from alarm import Alarm
+from nfc_reader import NfcReader
+from motion_detection import MotionDetection
 
 from tinkerforge.ip_connection import IPConnection
 
 from tinkerforge.bricklet_ptc_v2 import BrickletPTCV2
 from tinkerforge.bricklet_ambient_light_v3 import BrickletAmbientLightV3
 from tinkerforge.bricklet_humidity_v2 import BrickletHumidityV2
-from tinkerforge.bricklet_motion_detector_v2 import BrickletMotionDetectorV2
 
 from tinkerforge.bricklet_e_paper_296x128 import BrickletEPaper296x128
 from tinkerforge.bricklet_lcd_128x64 import BrickletLCD128x64
-from tinkerforge.bricklet_nfc import BrickletNFC
-
-from tinkerforge.bricklet_e_paper_296x128 import BrickletEPaper296x128
-from tinkerforge.bricklet_nfc import BrickletNFC
 
 class Statistics:
     def __init__(self, title, unit, min, max, critical_min=None, critical_max=None):
@@ -82,8 +79,6 @@ class SensorData:
     def __str__(self):
         return "\n".join([str(data) for data in self])
 
-ALARM = None
-COUNT_DOWN = None
 SENSOR_DATA = SensorData()
 
 IP = "172.20.10.242"
@@ -100,13 +95,6 @@ def ambient_light_callback(illuminance):
 
 def moisture_callback(moisture):
     SENSOR_DATA.moisture.set_current(moisture / 100)
-
-def start_motion_detection():
-    if ALARM.can_trigger():
-        COUNT_DOWN.start_count_down(10, ALARM.trigger_alarm)
-
-def end_motion_detection():
-    print("stop motion detected")
 
 class LCD_Display:
     UID = "24Rh"
@@ -170,19 +158,6 @@ class LCD_Display:
                 self.lcd.COLOR_BLACK,
                 f"{round(data_min, 2)}")
 
-def cb_reader_state_changed(state, idle, nfc):
-    if state == nfc.READER_STATE_REQUEST_TAG_ID_READY:
-        ret = nfc.reader_get_tag_id()
-
-        print("Found tag of type " +
-              str(ret.tag_type) +
-              " with ID [" +
-              " ".join(map(str, map('0x{:02X}'.format, ret.tag_id))) +
-              "]")
-
-    if idle:
-        nfc.reader_request_tag_id()
-
 if __name__ == "__main__":
     conn = IPConnection()
 
@@ -191,14 +166,14 @@ if __name__ == "__main__":
     lcd_display = LCD_Display(conn)
 
     # sensors
-    COUNT_DOWN = CountDown(conn)
-    ALARM = Alarm(conn, COUNT_DOWN, 60)
+    count_down = CountDown(conn)
+    alarm = Alarm(conn, count_down, 60)
+    nfc_reader = NfcReader(conn, count_down, alarm)
+    motion_detection = MotionDetection(conn, count_down, alarm)
 
-    motion_detection = BrickletMotionDetectorV2("ML4", conn)
     ambient_light = BrickletAmbientLightV3("Pdw", conn)
     temperature = BrickletPTCV2("Wcg", conn)
     moisture_sensor = BrickletHumidityV2("ViW", conn)
-    nfc = BrickletNFC("22ND", conn)
 
     conn.connect(IP, PORT)
 
@@ -212,15 +187,10 @@ if __name__ == "__main__":
     moisture_sensor.register_callback(moisture_sensor.CALLBACK_HUMIDITY, moisture_callback)
     moisture_sensor.set_humidity_callback_configuration(1000, False, "x", 0, 0)
 
-    nfc.register_callback(nfc.CALLBACK_READER_STATE_CHANGED,
-                          lambda x, y: cb_reader_state_changed(x, y, nfc))
-    nfc.set_mode(nfc.MODE_READER)
-    
-    motion_detection.register_callback(motion_detection.CALLBACK_MOTION_DETECTED, start_motion_detection)
-    motion_detection.register_callback(motion_detection.CALLBACK_DETECTION_CYCLE_ENDED, end_motion_detection)
-
     lcd_display.setup()
-    ALARM.setup()
+    alarm.setup()
+    nfc_reader.setup()
+    motion_detection.setup()
 
     count = 0
 
@@ -258,7 +228,7 @@ if __name__ == "__main__":
                     discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
                     data.last_notified = now
 
-            ALARM.update()
+            alarm.update()
 
             time.sleep(0.1)
 
