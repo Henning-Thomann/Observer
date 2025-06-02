@@ -90,7 +90,6 @@ def main(conn):
     dual_button = BrickletDualButtonV2("Vd8", conn)
 
     def motion_callback(left, right, _left_led, _right_led):
-        print("aaaaaaaah")
         actions[1] = left == BrickletDualButtonV2.BUTTON_STATE_PRESSED
         actions[2] = right == BrickletDualButtonV2.BUTTON_STATE_PRESSED
 
@@ -231,10 +230,9 @@ def main(conn):
 
             black_white_flat = [bool(pixel) for lines in black_white for pixel in lines]
             # print(black_white_flat)
-            # if tick % 60 == 0:
-            #     lcd.clear_display()
-            #     lcd.write_pixels(0, 0, 127, 63, black_white_flat)
-            # tick += 1
+            if tick % 30 == 0:
+                lcd.write_pixels(0, 0, 127, 63, black_white_flat)
+            tick += 1
             # Games variables can be also accessed via
             # (including the ones that were not added as available to a game state):
             # game.get_game_variable(GameVariable.AMMO2)

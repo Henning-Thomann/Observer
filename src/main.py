@@ -162,7 +162,7 @@ if __name__ == "__main__":
     conn = IPConnection()
 
     # actors
-    paper_display = BrickletEPaper296x128("XGL", conn)
+    paper_display = BrickletEPaper296x128("24KJ", conn)
     lcd_display = LCD_Display(conn)
 
     # sensors
@@ -210,13 +210,13 @@ if __name__ == "__main__":
             lcd_display.tick(SENSOR_DATA)
             lcd_display.render()
 
-            paper_display.fill_display(paper_display.COLOR_BLACK)
+            paper_display.fill_display(paper_display.COLOR_WHITE)
             if count % 20 == 0:
                 for (i, data) in enumerate(SENSOR_DATA):
                     paper_display.draw_text(
                         8, 16 * (i + 1),
                         paper_display.FONT_12X16,
-                        paper_display.COLOR_RED if data.is_critical else paper_display.COLOR_WHITE,
+                        paper_display.COLOR_RED if data.is_critical else paper_display.COLOR_BLACK,
                         paper_display.ORIENTATION_HORIZONTAL,
                         f"{data.title}:{data.get_current()} {data.unit}")
                 paper_display.draw()
