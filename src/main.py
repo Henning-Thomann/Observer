@@ -9,6 +9,7 @@ import discord
 
 from count_down import CountDown
 from alarm import Alarm
+from doom import doom_main
 from nfc_reader import NfcReader
 from motion_detection import MotionDetection
 
@@ -201,11 +202,17 @@ if __name__ == "__main__":
                 os.system("cls")
             else:
                 os.system("clear")
-            print(count)
+
+            if nfc_reader.doom_mode:
+                try:
+                    doom_main()
+                finally:
+                    nfc_reader.doom_mode = False
+
             now = datetime.now()
             print(lcd_display.current_tab)
 
-            # print(SENSOR_DATA)
+            print(SENSOR_DATA)
 
             lcd_display.tick(SENSOR_DATA)
             lcd_display.render()

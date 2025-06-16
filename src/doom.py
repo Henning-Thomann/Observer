@@ -187,7 +187,7 @@ def main(conn):
     # 5 more combinations are naturally possible but only 3 are included for transparency when watching.
 
     # Run this many episodes
-    episodes = 10
+    episodes = 1
 
     # Sets time that will pause the engine after each action (in seconds)
     # Without this everything would go too fast for you to keep track of what's happening.
@@ -260,7 +260,7 @@ def main(conn):
     # It will be done automatically anyway but sometimes you need to do it in the middle of the program...
     game.close()
 
-if __name__ == "__main__":
+def doom_main():
     conn = IPConnection()
     try:
         main(conn)
