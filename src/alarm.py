@@ -7,6 +7,7 @@ class Alarm:
         self.speaker = BrickletPiezoSpeakerV2("R7M", conn)
         self.led_button = BrickletRGBLEDButton("23Qx", conn)
         self._is_triggered = False
+        self._can_reset = False
         self._count_down = count_down
 
         self._trigger_timout_duration = trigger_timout_duration
@@ -31,17 +32,17 @@ class Alarm:
         return (datetime.now() - self._trigger_timeout_start).total_seconds() >= self._trigger_timout_duration
             
     def button_callback(self, state):
-        if (state == self.led_button.BUTTON_STATE_PRESSED):
+        if self._can_reset and state == self.led_button.BUTTON_STATE_PRESSED:
             print("Button pressed - resetting alarm and enabling motion detection")
 
             self._trigger_timeout_start = datetime.now();
             self.led_button.set_color(0, 0, 0)
             self._is_triggered = False
+            self._can_reset = False
 
             # Button-Press soll das System wieder in den normalen Zustand versetzen
             self._count_down.enable_motion_detection()
     
-    def reset_alarm(self):
-        self._is_triggered = False
-        self.led_button.set_color(0,0,0)
-        self.speaker.set_alarm(800,2000,10,1,10,0)
+    def enable_reset(self):
+        self.led_button.set_color(30, 255, 30)
+        self._can_reset = True

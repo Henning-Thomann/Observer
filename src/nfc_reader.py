@@ -27,7 +27,7 @@ class NfcReader:
             if tag_id[-1] == self.VALID_NFC_ID_SUFFIX:
                 print("Valid NFC card scanned - Stopping countdown and disabling motion detection")
                 self._count_down.stop_count_down()
-                self._alarm.reset_alarm()
+                self._alarm.enable_reset()
                 self._count_down.disable_motion_detection()  # Verwende die neue Methode!
             else:
                 print("Scanned card doesn't match Whitelist. Try another card")
