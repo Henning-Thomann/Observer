@@ -2,11 +2,13 @@ from tinkerforge.bricklet_nfc import BrickletNFC
 
 class NfcReader:
     VALID_NFC_ID_SUFFIX = 0x90
+    DOOM_NFC_SUFFIC = 0x80
 
     def __init__(self, conn, count_down, alarm):
         self._alarm = alarm
         self._count_down = count_down
         self._nfc = BrickletNFC("22ND", conn)
+        self.doom_mode = False
 
     def setup(self):
         self._nfc.register_callback(self._nfc.CALLBACK_READER_STATE_CHANGED,
@@ -29,6 +31,8 @@ class NfcReader:
                 self._count_down.stop_count_down()
                 self._alarm.enable_reset()
                 self._count_down.disable_motion_detection()  # Verwende die neue Methode!
+            elif tag_id[-1] == self.DOOM_NFC_SUFFIC:
+                self.doom_mode = True
             else:
                 print("Scanned card doesn't match Whitelist. Try another card")
 
