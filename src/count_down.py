@@ -8,7 +8,7 @@ class CountDown:
 
     def start_count_down(self, count_down, callback):
         if self.allow_cool_down:
-            self.allow_cool_down = True
+            self.allow_cool_down = False
             self.segment_display.start_counter(count_down, 0, -1, 1000)
             self._callback = callback
 
@@ -16,6 +16,10 @@ class CountDown:
         if self._callback:
             self._callback()
             self._callback = None
+
+    def reset_count_down(self):
+        self.allow_cool_down = True
+        self._callback = None
 
     def stop_count_down(self):
         print("Stopping countdown")

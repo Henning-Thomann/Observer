@@ -42,6 +42,7 @@ class Alarm:
 
             # Button-Press soll das System wieder in den normalen Zustand versetzen
             self._count_down.enable_motion_detection()
+            self._count_down.reset_count_down()
     
     def enable_reset(self):
         self.led_button.set_color(30, 255, 30)
