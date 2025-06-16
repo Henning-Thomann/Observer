@@ -135,7 +135,7 @@ class LCD_Display:
 
         if self.graph_data:
             # draw graph
-            data_begin = 0 if len(self.graph_data) < 60 else len(self.graph_data) - 60
+            data_begin = 0 if len(self.graph_data) <= 60 else len(self.graph_data) - 60
 
             data = self.graph_data[data_begin:]
 
@@ -167,7 +167,7 @@ if __name__ == "__main__":
 
     # sensors
     count_down = CountDown(conn)
-    alarm = Alarm(conn, count_down, 60)
+    alarm = Alarm(conn, count_down, 1)
     nfc_reader = NfcReader(conn, count_down, alarm)
     motion_detection = MotionDetection(conn, count_down, alarm)
 
@@ -201,11 +201,11 @@ if __name__ == "__main__":
                 os.system("cls")
             else:
                 os.system("clear")
-
+            print(count)
             now = datetime.now()
             print(lcd_display.current_tab)
 
-            print(SENSOR_DATA)
+            # print(SENSOR_DATA)
 
             lcd_display.tick(SENSOR_DATA)
             lcd_display.render()
@@ -222,13 +222,13 @@ if __name__ == "__main__":
                 paper_display.draw()
 
             for data in SENSOR_DATA:
-
                 notified_seconds_ago = (now - data.last_notified).total_seconds()
                 if(data.is_critical and notified_seconds_ago > NOTIFICATION_DELAY_SECONDS):
                     discord.send(f"illuminance is critical: {SENSOR_DATA.illuminance.get_current()}{SENSOR_DATA.illuminance.unit}")
                     data.last_notified = now
 
             alarm.update()
+            count += 1
 
             time.sleep(0.1)
 

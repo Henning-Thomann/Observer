@@ -14,7 +14,6 @@ class NfcReader:
         self._nfc.set_mode(self._nfc.MODE_READER)
 
     def cb_reader_state_changed(self, state, idle, nfc):
-        global COUNT_DOWN, ALARM
         if state == nfc.READER_STATE_REQUEST_TAG_ID_READY:
             ret = nfc.reader_get_tag_id()
             tag_id = list(ret.tag_id)
@@ -27,9 +26,9 @@ class NfcReader:
 
             if tag_id[-1] == self.VALID_NFC_ID_SUFFIX:
                 print("Valid NFC card scanned - Stopping countdown and disabling motion detection")
-                COUNT_DOWN.stop_count_down()
-                ALARM.reset_alarm()
-                COUNT_DOWN.disable_motion_detection()  # Verwende die neue Methode!
+                self._count_down.stop_count_down()
+                self._alarm.reset_alarm()
+                self._count_down.disable_motion_detection()  # Verwende die neue Methode!
             else:
                 print("Scanned card doesn't match Whitelist. Try another card")
 

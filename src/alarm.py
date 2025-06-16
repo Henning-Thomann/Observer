@@ -27,6 +27,7 @@ class Alarm:
 
     def can_trigger(self):
         print("Timeout time (sec): " + str((datetime.now() - self._trigger_timeout_start).total_seconds()))
+        print("can't trigger")
         return (datetime.now() - self._trigger_timeout_start).total_seconds() >= self._trigger_timout_duration
             
     def button_callback(self, state):
